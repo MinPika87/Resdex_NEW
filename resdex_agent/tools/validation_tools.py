@@ -1,10 +1,22 @@
+# Replace the content of resdex_agent/tools/validation_tools.py
+
 """
 Validation tools for ResDex Agent.
 """
 
 from typing import Dict, Any, List, Optional, Tuple
 import logging
-from google.adk.tools import Tool
+
+# Create a simple Tool base class
+class Tool:
+    """Base tool class."""
+    def __init__(self, name: str, description: str = ""):
+        self.name = name
+        self.description = description
+    
+    async def __call__(self, **kwargs) -> Dict[str, Any]:
+        raise NotImplementedError
+
 from ..utils.data_processing import DataProcessor
 from ..utils.constants import TECH_SKILLS, CITIES
 

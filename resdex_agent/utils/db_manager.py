@@ -2,10 +2,10 @@
 Database management utilities.
 """
 
-import pandas as pd
-import pymysql
-from sqlalchemy import create_engine
-from typing import Dict, List, Optional
+import pandas as pd #type: ignore
+import pymysql #type: ignore
+from sqlalchemy import create_engine #type: ignore
+from typing import Dict, List, Optional, Any
 import logging
 from ..config import config
 

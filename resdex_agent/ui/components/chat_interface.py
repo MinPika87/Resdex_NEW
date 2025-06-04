@@ -1,3 +1,5 @@
+# Replace the content of resdex_agent/ui/components/chat_interface.py
+
 """
 Chat interface component for ResDex Agent UI.
 """
@@ -5,7 +7,9 @@ Chat interface component for ResDex Agent UI.
 import streamlit as st
 import asyncio
 from typing import Dict, Any, Optional
-from google.adk.core.content import Content
+
+# Import Content from agent.py
+from ...agent import Content
 
 
 class ChatInterface:
@@ -78,7 +82,7 @@ class ChatInterface:
             with col2:
                 if st.form_submit_button("Clear Chat 🗑️"):
                     self.session_state['chat_history'] = []
-                    st.experimental_rerun()
+                    st.rerun()
             
             if chat_submitted and user_input.strip():
                 asyncio.run(self._handle_chat_message(user_input.strip()))
@@ -162,7 +166,7 @@ class ChatInterface:
                             "content": suggestion_text
                         })
             
-            st.experimental_rerun()
+            st.rerun()
             
         except Exception as e:
             error_msg = f"❌ An error occurred: {str(e)}"
@@ -170,7 +174,7 @@ class ChatInterface:
                 "role": "assistant",
                 "content": error_msg
             })
-            st.experimental_rerun()
+            st.rerun()
     
     async def _handle_triggered_search(self, result_data: Dict[str, Any]):
         """Handle search triggered by AI agent."""

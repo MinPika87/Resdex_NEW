@@ -6,11 +6,11 @@ from typing import Dict, Any, List, Optional
 import logging
 from google.adk.agents import Agent
 from pydantic import BaseModel
-from typing import Dict, Any
-
 class Content(BaseModel):
     """Content wrapper for agent communication."""
     data: Dict[str, Any]
+from .config import AgentConfig  # Fixed: removed the 'x' typo
+from .tools.search_tools import SearchTool
 from .config import AgentConfig
 from .tools.search_tools import SearchTool
 from .sub_agents.search_interaction.agent import SearchInteractionAgent
@@ -21,30 +21,34 @@ logger = logging.getLogger(__name__)
 class ResDexRootAgent(Agent):
     """
     Root agent for ResDex candidate search and filtering system.
-    
-    This agent orchestrates sub-agents and provides the main interface
-    for candidate search functionality following Google ADK patterns.
     """
-    
+
     def __init__(self, config: Optional[AgentConfig] = None):
-        self.config = config or AgentConfig.from_env()
-        
+        _config = config or AgentConfig.from_env()
+
         # Initialize tools
         tools = [
             SearchTool("search_tool")
         ]
-        
+
+        # Call super with required params
         super().__init__(
-            name=self.config.name,
-            description=self.config.description,
+            name=_config.name,
+            description=_config.description,
             tools=tools
         )
-        
-        # Initialize sub-agents
+
+        # Assign config privately
+        self._config = _config
         self.sub_agents = {}
         self._initialize_sub_agents()
-        
-        logger.info(f"Initialized {self.config.name} v{self.config.version}")
+
+        logger.info(f"Initialized {_config.name} v{_config.version}")
+
+    @property
+    def config(self) -> AgentConfig:
+        """Read-only access to config."""
+        return self._config
     
     def _initialize_sub_agents(self):
         """Initialize all enabled sub-agents."""

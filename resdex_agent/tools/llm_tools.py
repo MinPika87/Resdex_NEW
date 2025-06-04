@@ -1,3 +1,5 @@
+# Replace the content of resdex_agent/tools/llm_tools.py
+
 """
 LLM interaction tools for ResDex Agent.
 """
@@ -5,7 +7,17 @@ LLM interaction tools for ResDex Agent.
 from typing import Dict, Any, List, Optional, Union
 import logging
 import json
-from google.adk.tools import Tool
+
+# Create a simple Tool base class
+class Tool:
+    """Base tool class."""
+    def __init__(self, name: str, description: str = ""):
+        self.name = name
+        self.description = description
+    
+    async def __call__(self, **kwargs) -> Dict[str, Any]:
+        raise NotImplementedError
+
 import requests
 from ..config import config
 from ..utils.data_processing import DataProcessor

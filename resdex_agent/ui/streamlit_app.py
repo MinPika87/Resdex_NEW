@@ -1,17 +1,18 @@
+# Replace the content of resdex_agent/ui/streamlit_app.py
+
 """
 Streamlit application for ResDex Agent following ADK patterns.
 """
 
-import streamlit as st
+import streamlit as st #type: ignore
 import asyncio
 import logging
 from typing import Dict, Any, Optional
-from google.adk.core.content import Content
-from ..agent import ResDexRootAgent
-from ..config import AgentConfig
-from .components.search_form import SearchForm
-from .components.candidate_display import CandidateDisplay
-from .components.chat_interface import ChatInterface
+from resdex_agent.agent import ResDexRootAgent, Content
+from resdex_agent.config import AgentConfig
+from resdex_agent.ui.components.search_form import SearchForm
+from resdex_agent.ui.components.candidate_display import CandidateDisplay
+from resdex_agent.ui.components.chat_interface import ChatInterface
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +218,7 @@ class StreamlitApp:
                     if 'details' in result.data:
                         st.error(f"Details: {result.data['details']}")
                 
-                st.experimental_rerun()
+                st.rerun()
                 
         except Exception as e:
             logger.error(f"Search request failed: {e}")

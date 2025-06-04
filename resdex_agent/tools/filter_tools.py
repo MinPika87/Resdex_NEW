@@ -1,9 +1,21 @@
+# Replace the content of resdex_agent/tools/filter_tools.py
+
 """
 Filter management tools for ResDex Agent.
 """
 from typing import Dict, Any, List, Optional
 import logging
-from google.adk.tools import Tool
+
+# Create a simple Tool base class since we're not using google.adk.tools
+class Tool:
+    """Base tool class."""
+    def __init__(self, name: str, description: str = ""):
+        self.name = name
+        self.description = description
+    
+    async def __call__(self, **kwargs) -> Dict[str, Any]:
+        raise NotImplementedError
+
 from ..utils.data_processing import DataProcessor
 from ..utils.constants import ModificationType
 

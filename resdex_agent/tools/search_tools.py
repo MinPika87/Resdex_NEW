@@ -1,10 +1,23 @@
+# Replace the content of resdex_agent/tools/search_tools.py
+
 """
 Search-related tools for ResDex Agent.
 """
 
 from typing import Dict, Any, List, Optional
 import logging
-from google.adk.tools import Tool
+
+# Since Google ADK doesn't have a separate Tool class in the same way,
+# we'll create our own tool class that works with ADK
+class Tool:
+    """Base tool class for ResDex Agent tools."""
+    def __init__(self, name: str, description: str = ""):
+        self.name = name
+        self.description = description
+    
+    async def __call__(self, **kwargs) -> Dict[str, Any]:
+        raise NotImplementedError
+
 from ..utils.api_client import api_client
 from ..utils.data_processing import DataProcessor
 from ..utils.db_manager import db_manager

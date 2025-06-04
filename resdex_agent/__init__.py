@@ -14,4 +14,5 @@ __author__ = "ResDex Team"
 __all__ = [
     "ResDexRootAgent",
     "AgentConfig",
+    "agent"
 ]
