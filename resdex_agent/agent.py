@@ -1,52 +1,63 @@
+# Replace resdx_agent/agent.py with this fixed version
+
 """
-Root ResDex Agent following Google ADK patterns.
+Root ResDex Agent - Simple implementation without Pydantic conflicts.
 """
 
 from typing import Dict, Any, List, Optional
 import logging
-from google.adk.agents import Agent
-from pydantic import BaseModel
-class Content(BaseModel):
-    """Content wrapper for agent communication."""
-    data: Dict[str, Any]
-from .config import AgentConfig  # Fixed: removed the 'x' typo
-from .tools.search_tools import SearchTool
-from .config import AgentConfig
-from .tools.search_tools import SearchTool
-from .sub_agents.search_interaction.agent import SearchInteractionAgent
 
 logger = logging.getLogger(__name__)
 
 
-class ResDexRootAgent(Agent):
+class Content:
+    """Simple content wrapper for agent communication."""
+    def __init__(self, data: Dict[str, Any]):
+        self.data = data
+
+
+class BaseAgent:
+    """Simple base agent class without Pydantic."""
+    def __init__(self, name: str, description: str = "", tools: List = None):
+        self.name = name
+        self.description = description
+        # CRITICAL FIX: Store tools as dict
+        self.tools = {}
+        if tools:
+            for tool in tools:
+                self.tools[tool.name] = tool
+        
+        print(f"🔍 {name} initialized with tools: {list(self.tools.keys())}")
+
+
+class ResDexRootAgent(BaseAgent):
     """
     Root agent for ResDex candidate search and filtering system.
     """
 
-    def __init__(self, config: Optional[AgentConfig] = None):
-        _config = config or AgentConfig.from_env()
+    def __init__(self, config=None):
+        from .config import AgentConfig
+        self._config = config or AgentConfig.from_env()
 
         # Initialize tools
-        tools = [
-            SearchTool("search_tool")
-        ]
+        from .tools.search_tools import SearchTool
+        tools_list = [SearchTool("search_tool")]
 
-        # Call super with required params
+        # Call parent constructor
         super().__init__(
-            name=_config.name,
-            description=_config.description,
-            tools=tools
+            name=self._config.name,
+            description=self._config.description,
+            tools=tools_list
         )
 
-        # Assign config privately
-        self._config = _config
+        # Initialize sub-agents
         self.sub_agents = {}
         self._initialize_sub_agents()
 
-        logger.info(f"Initialized {_config.name} v{_config.version}")
+        logger.info(f"Initialized {self._config.name} v{self._config.version}")
 
     @property
-    def config(self) -> AgentConfig:
+    def config(self):
         """Read-only access to config."""
         return self._config
     
@@ -54,13 +65,11 @@ class ResDexRootAgent(Agent):
         """Initialize all enabled sub-agents."""
         if self.config.is_sub_agent_enabled("search_interaction"):
             from .sub_agents.search_interaction.config import SearchInteractionConfig
+            from .sub_agents.search_interaction.agent import SearchInteractionAgent
+            
             sub_config = SearchInteractionConfig()
             self.sub_agents["search_interaction"] = SearchInteractionAgent(sub_config)
             logger.info("Initialized SearchInteractionAgent")
-        
-        # Future sub-agents can be initialized here
-        # if self.config.is_sub_agent_enabled("skill_expansion"):
-        #     self.sub_agents["skill_expansion"] = SkillExpansionAgent()
         
         logger.info(f"Initialized {len(self.sub_agents)} sub-agents")
     
@@ -86,6 +95,8 @@ class ResDexRootAgent(Agent):
                 
         except Exception as e:
             logger.error(f"Root agent execution failed: {e}")
+            import traceback
+            traceback.print_exc()
             return Content(data={
                 "success": False,
                 "error": "Root agent execution failed",
@@ -148,7 +159,7 @@ class ResDexRootAgent(Agent):
         for name, agent in self.sub_agents.items():
             sub_agent_status[name] = {
                 "available": True,
-                "name": agent.name if hasattr(agent, 'name') else name
+                "name": getattr(agent, 'name', name)
             }
         
         health_data = {

@@ -1,5 +1,7 @@
+# Replace resdx_agent/ui/components/candidate_display.py with this fixed version for Streamlit 1.12
+
 """
-Candidate display component for ResDex Agent UI.
+Candidate display component for ResDex Agent UI - Compatible with Streamlit 1.12
 """
 
 import streamlit as st
@@ -37,19 +39,15 @@ class CandidateDisplay:
     
     def _render_results_header(self, total_results: int, selected_keywords: List[str]):
         """Render results header with summary."""
-        col1, col2 = st.columns([3, 1])
+        keywords_text = ", ".join([kw.replace("★ ", "") for kw in selected_keywords])
+        st.markdown(f"""
+        <div style="color: #1f77b4; font-weight: bold; font-size: 1.1rem; margin-bottom: 1rem;">
+            🎯 AI found: {total_results:,} profiles for {keywords_text}
+        </div>
+        """, unsafe_allow_html=True)
         
-        with col1:
-            keywords_text = ", ".join([kw.replace("★ ", "") for kw in selected_keywords])
-            st.markdown(f"""
-            <div style="color: #1f77b4; font-weight: bold; font-size: 1.1rem;">
-                🎯 AI found: {total_results:,} profiles for {keywords_text}
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            if st.button("💾 Save Search"):
-                st.success("Search saved successfully!")
+        if st.button("💾 Save Search"):
+            st.success("Search saved successfully!")
     
     def _render_candidate_card(self, candidate: Dict[str, Any], index: int):
         """Render a single candidate card."""
@@ -58,14 +56,9 @@ class CandidateDisplay:
             <div class="candidate-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                     <div style="display: flex; align-items: center;">
-                        <input type="checkbox" style="margin-right: 0.5rem;">
                         <h4 style="margin: 0; color: #2c3e50;">{candidate.get('name', 'Unknown')}</h4>
                         <span style="margin-left: 1rem; color: #27ae60; font-weight: bold;">₹{candidate.get('salary', 0)} Lakhs</span>
                         <span style="margin-left: 1rem; color: #7f8c8d;">📍 {candidate.get('current_location', 'Not specified')}</span>
-                    </div>
-                    <div>
-                        <span style="cursor: pointer;">⬆️</span>
-                        <span style="cursor: pointer; margin-left: 0.5rem;">💾</span>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
@@ -79,7 +72,7 @@ class CandidateDisplay:
             # Preferred locations
             self._render_preferred_locations(candidate)
             
-            # Action buttons
+            # Action buttons - FIXED: No nested columns for Streamlit 1.12
             self._render_action_buttons(candidate, index)
             
             # Footer stats
@@ -172,20 +165,16 @@ class CandidateDisplay:
         """, unsafe_allow_html=True)
     
     def _render_action_buttons(self, candidate: Dict[str, Any], index: int):
-        """Render action buttons for candidate."""
-        col1, col2, col3 = st.columns(3)
+        """Render action buttons for candidate - FIXED for Streamlit 1.12."""
+        # FIXED: Simple buttons without nested columns
+        if st.button("📞 View Phone", key=f"phone_{index}"):
+            st.info("Phone number revealed!")
         
-        with col1:
-            if st.button("📞 View Phone", key=f"phone_{index}"):
-                st.info("Phone number revealed!")
+        if st.button("💬 Call Candidate", key=f"call_{index}"):
+            st.info("Initiating call...")
         
-        with col2:
-            if st.button("💬 Call Candidate", key=f"call_{index}"):
-                st.info("Initiating call...")
-        
-        with col3:
-            if st.button("📧 Send Email", key=f"email_{index}"):
-                st.info("Email composer opened!")
+        if st.button("📧 Send Email", key=f"email_{index}"):
+            st.info("Email composer opened!")
     
     def _render_candidate_footer(self, candidate: Dict[str, Any]):
         """Render candidate footer with stats and actions."""
@@ -211,7 +200,7 @@ class CandidateDisplay:
         """, unsafe_allow_html=True)
     
     def _render_pagination_controls(self, total_candidates: int):
-        """Render pagination controls."""
+        """Render pagination controls - FIXED for Streamlit 1.12."""
         if total_candidates <= self.page_size:
             return
         
@@ -220,24 +209,23 @@ class CandidateDisplay:
         
         st.markdown("---")
         
-        col1, col2, col3 = st.columns([1, 2, 1])
+        # FIXED: Simple layout without nested columns
+        # Previous button
+        if st.button("⬅️ Previous", disabled=current_page <= 0):
+            self.session_state['page'] = max(0, current_page - 1)
+            st.experimental_rerun()
         
-        with col1:
-            if st.button("⬅️ Previous", disabled=current_page <= 0):
-                self.session_state['page'] = max(0, current_page - 1)
-                st.experimental_rerun()
+        # Page info
+        start_idx = current_page * self.page_size + 1
+        end_idx = min((current_page + 1) * self.page_size, total_candidates)
+        st.markdown(f"""
+        <div style="text-align: center; padding: 0.5rem;">
+            Showing {start_idx}-{end_idx} of {total_candidates} candidates<br>
+            <small>Page {current_page + 1} of {total_pages}</small>
+        </div>
+        """, unsafe_allow_html=True)
         
-        with col2:
-            start_idx = current_page * self.page_size + 1
-            end_idx = min((current_page + 1) * self.page_size, total_candidates)
-            st.markdown(f"""
-            <div style="text-align: center; padding: 0.5rem;">
-                Showing {start_idx}-{end_idx} of {total_candidates} candidates<br>
-                <small>Page {current_page + 1} of {total_pages}</small>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            if st.button("Next ➡️", disabled=(current_page + 1) * self.page_size >= total_candidates):
-                self.session_state['page'] = current_page + 1
-                st.experimental_rerun()
+        # Next button
+        if st.button("Next ➡️", disabled=(current_page + 1) * self.page_size >= total_candidates):
+            self.session_state['page'] = current_page + 1
+            st.experimental_rerun()

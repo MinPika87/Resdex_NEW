@@ -1,15 +1,12 @@
-# Replace the content of resdex_agent/ui/components/chat_interface.py
+# Replace resdx_agent/ui/components/chat_interface.py with this fixed version
 
 """
-Chat interface component for ResDex Agent UI.
+Chat interface component for ResDex Agent UI - Compatible with Streamlit 1.12
 """
 
 import streamlit as st
 import asyncio
 from typing import Dict, Any, Optional
-
-# Import Content from agent.py
-from ...agent import Content
 
 
 class ChatInterface:
@@ -74,38 +71,33 @@ class ChatInterface:
                 help="Ask me to modify filters, search candidates, or analyze results"
             )
             
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                chat_submitted = st.form_submit_button("Send 💬", type="primary")
-            
-            with col2:
-                if st.form_submit_button("Clear Chat 🗑️"):
-                    self.session_state['chat_history'] = []
-                    st.rerun()
+            # Simple buttons without nested columns for Streamlit 1.12
+            chat_submitted = st.form_submit_button("Send 💬")
             
             if chat_submitted and user_input.strip():
                 asyncio.run(self._handle_chat_message(user_input.strip()))
+        
+        # Clear chat button outside the form
+        if st.button("Clear Chat 🗑️"):
+            self.session_state['chat_history'] = []
+            st.experimental_rerun()
     
     def _render_quick_actions(self):
         """Render quick action buttons."""
         st.markdown("**Quick Actions:**")
         
-        col1, col2 = st.columns(2)
+        # Simple buttons without nested columns for Streamlit 1.12
+        if st.button("📊 Analyze Results", help="Get insights about current search results"):
+            asyncio.run(self._handle_chat_message("analyze the current search results"))
         
-        with col1:
-            if st.button("📊 Analyze Results", help="Get insights about current search results"):
-                asyncio.run(self._handle_chat_message("analyze the current search results"))
-            
-            if st.button("🔧 Sort by Experience", help="Sort candidates by experience level"):
-                asyncio.run(self._handle_chat_message("sort candidates by experience"))
+        if st.button("🔧 Sort by Experience", help="Sort candidates by experience level"):
+            asyncio.run(self._handle_chat_message("sort candidates by experience"))
         
-        with col2:
-            if st.button("💰 Sort by Salary", help="Sort candidates by salary expectations"):
-                asyncio.run(self._handle_chat_message("sort candidates by salary"))
-            
-            if st.button("📍 Filter by Location", help="Help with location-based filtering"):
-                asyncio.run(self._handle_chat_message("help me filter by location"))
+        if st.button("💰 Sort by Salary", help="Sort candidates by salary expectations"):
+            asyncio.run(self._handle_chat_message("sort candidates by salary"))
+        
+        if st.button("📍 Filter by Location", help="Help with location-based filtering"):
+            asyncio.run(self._handle_chat_message("help me filter by location"))
     
     async def _handle_chat_message(self, user_input: str):
         """Handle chat message processing."""
@@ -118,22 +110,45 @@ class ChatInterface:
             
             # Show processing indicator
             with st.spinner("🤖 AI is thinking..."):
-                # Prepare content for root agent
+                # Prepare content for root agent with proper session state
+                # Convert session_state to regular dict to avoid list indexing issues
+                session_state_dict = {}
+                for key, value in self.session_state.items():
+                    try:
+                        # Ensure all values are serializable
+                        if isinstance(value, (str, int, float, bool, list, dict, type(None))):
+                            session_state_dict[key] = value
+                        else:
+                            session_state_dict[key] = str(value)
+                    except Exception as e:
+                        print(f"⚠️ Skipping session state key {key}: {e}")
+                        continue
+                
+                print(f"🔍 Prepared session state: {list(session_state_dict.keys())}")
+                
+                # FIXED: Import Content from the right place
+                from ...agent import Content
+                
                 content = Content(data={
                     "request_type": "search_interaction",
                     "user_input": user_input,
-                    "session_state": dict(self.session_state)  # Convert to regular dict
+                    "session_state": session_state_dict
                 })
                 
                 # Process through root agent
                 result = await self.root_agent.execute(content)
                 
+                print(f"🔍 Root agent result: {result.data.get('success', False)}")
+                
                 if result.data["success"]:
                     # Update session state with any modifications
                     if "session_state" in result.data:
                         updated_state = result.data["session_state"]
-                        for key, value in updated_state.items():
-                            self.session_state[key] = value
+                        if isinstance(updated_state, dict):
+                            for key, value in updated_state.items():
+                                self.session_state[key] = value
+                        else:
+                            print(f"⚠️ Updated session state is not a dict: {type(updated_state)}")
                     
                     # Add AI response to chat
                     ai_message = result.data.get("message", "Request processed successfully.")
@@ -166,21 +181,30 @@ class ChatInterface:
                             "content": suggestion_text
                         })
             
-            st.rerun()
+            # Use experimental_rerun for Streamlit 1.12
+            st.experimental_rerun()
             
         except Exception as e:
+            print(f"❌ Chat message handling error: {e}")
+            import traceback
+            traceback.print_exc()
             error_msg = f"❌ An error occurred: {str(e)}"
             self.session_state['chat_history'].append({
                 "role": "assistant",
                 "content": error_msg
             })
-            st.rerun()
+            st.experimental_rerun()
     
     async def _handle_triggered_search(self, result_data: Dict[str, Any]):
         """Handle search triggered by AI agent."""
         try:
             # Prepare search filters from updated session state
             updated_state = result_data.get("session_state", self.session_state)
+            
+            # Ensure updated_state is a dict
+            if not isinstance(updated_state, dict):
+                print(f"⚠️ Updated state is not a dict: {type(updated_state)}")
+                updated_state = dict(self.session_state)
             
             search_filters = {
                 'keywords': updated_state.get('keywords', []),
@@ -194,6 +218,7 @@ class ChatInterface:
             }
             
             # Execute search through root agent
+            from ...agent import Content
             search_content = Content(data={
                 "request_type": "candidate_search",
                 "search_filters": search_filters
@@ -223,6 +248,9 @@ class ChatInterface:
                 })
                 
         except Exception as e:
+            print(f"❌ Triggered search error: {e}")
+            import traceback
+            traceback.print_exc()
             error_msg = f"❌ Search execution failed: {str(e)}"
             self.session_state['chat_history'].append({
                 "role": "assistant",

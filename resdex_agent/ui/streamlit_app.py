@@ -1,7 +1,7 @@
-# Replace the content of resdex_agent/ui/streamlit_app.py
+# Replace resdx_agent/ui/streamlit_app.py with this fixed version for Streamlit 1.12
 
 """
-Streamlit application for ResDex Agent following ADK patterns.
+Streamlit application for ResDex Agent - Compatible with Streamlit 1.12
 """
 
 import streamlit as st #type: ignore
@@ -104,7 +104,7 @@ class StreamlitApp:
                     st.json(health_status)
     
     def _render_main_content(self):
-        """Render main content area."""
+        """Render main content area - FIXED for Streamlit 1.12."""
         # Search form
         with st.container():
             st.markdown("### Search Configuration")
@@ -112,26 +112,25 @@ class StreamlitApp:
             # Company input
             self.search_form.render_company_input()
             
-            # Search filters in columns
-            col1, col2, col3, col4 = st.columns(4)
+            # FIXED: Use tabs instead of nested columns for Streamlit 1.12
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["Keywords", "Experience", "Location", "Salary", "Search"])
             
-            with col1:
+            with tab1:
                 self.search_form.render_keywords_section()
             
-            with col2:
+            with tab2:
                 self.search_form.render_experience_section()
             
-            with col3:
+            with tab3:
                 self.search_form.render_location_section()
             
-            with col4:
+            with tab4:
                 self.search_form.render_salary_section()
             
-            # Search button
-            search_button = st.button("🔍 Search Candidates", type="primary")
-            
-            if search_button:
-                asyncio.run(self._handle_search_request())
+            with tab5:
+                search_button = self.search_form.render_search_controls()
+                if search_button:
+                    asyncio.run(self._handle_search_request())
         
         # Results section
         st.markdown("---")
@@ -200,7 +199,7 @@ class StreamlitApp:
                     # Clear chat history for new search
                     st.session_state['chat_history'] = []
                     
-                    # Add welcome message
+                    # Add welcome message directly to session state
                     if st.session_state['candidates']:
                         welcome_msg = f"🎉 Found {len(st.session_state['candidates'])} candidates from {st.session_state['total_results']:,} total matches! How can I help you analyze these results?"
                         st.session_state['chat_history'].append({
@@ -218,7 +217,8 @@ class StreamlitApp:
                     if 'details' in result.data:
                         st.error(f"Details: {result.data['details']}")
                 
-                st.rerun()
+                # FIXED: Use experimental_rerun for Streamlit 1.12
+                st.experimental_rerun()
                 
         except Exception as e:
             logger.error(f"Search request failed: {e}")
@@ -284,25 +284,10 @@ class StreamlitApp:
             background-color: #f1f8e9;
         }
         
-        .status-indicator {
-            display: inline-block;
-            width: 0.5rem;
-            height: 0.5rem;
-            border-radius: 50%;
-            margin-right: 0.5rem;
-        }
-        
-        .status-healthy {
-            background-color: #28a745;
-        }
-        
-        .status-warning {
-            background-color: #ffc107;
-        }
-        
-        .status-error {
-            background-color: #dc3545;
-        }
+        /* Hide Streamlit menu and footer for cleaner look */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
         </style>
         """
 

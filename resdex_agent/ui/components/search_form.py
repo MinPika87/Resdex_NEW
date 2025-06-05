@@ -1,5 +1,7 @@
+# Replace resdx_agent/ui/components/search_form.py with this fixed version for Streamlit 1.12
+
 """
-Search form component for ResDex Agent UI.
+Search form component for ResDex Agent UI - Compatible with Streamlit 1.12
 """
 
 import streamlit as st
@@ -15,236 +17,169 @@ class SearchForm:
     
     def render_company_input(self):
         """Render company name input."""
-        col1, col2 = st.columns([3, 1])
+        company = st.text_input(
+            "Company Name *",
+            value=self.session_state.get('recruiter_company', ''),
+            placeholder="e.g., TCS, Infosys, Google",
+            help="Enter your company name (required for search)"
+        )
+        self.session_state['recruiter_company'] = company
         
-        with col1:
-            company = st.text_input(
-                "Company Name *",
-                value=self.session_state.get('recruiter_company', ''),
-                placeholder="e.g., TCS, Infosys, Google",
-                help="Enter your company name (required for search)"
-            )
-            self.session_state['recruiter_company'] = company
-        
-        with col2:
-            if company.strip():
-                st.markdown("""
-                <div style="margin-top: 1.5rem; color: #28a745;">
-                    ✅ Company set
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div style="margin-top: 1.5rem; color: #dc3545;">
-                    ⚠️ Required
-                </div>
-                """, unsafe_allow_html=True)
+        if not company.strip():
+            st.error("⚠️ Company name is required")
+        else:
+            st.success("✅ Company set")
     
     def render_keywords_section(self):
         """Render keywords/skills input section."""
-        st.markdown("**Skills & Keywords**")
+        st.subheader("Keywords")
         
         # Skill input form
-        with st.form(key="skill_form", clear_on_submit=True):
-            col1, col2 = st.columns([3, 1])
+        with st.form(key="keyword_form", clear_on_submit=True):
+            keyword_input = st.text_input("Add keyword", placeholder="e.g., Python")
+            make_mandatory = st.checkbox("Mark as mandatory")
             
-            with col1:
-                skill_input = st.selectbox(
-                    "Add skill",
-                    [""] + TECH_SKILLS[:50],  # Show top 50 skills
-                    help="Select a skill to add to your search"
-                )
+            form_submit = st.form_submit_button("Add Keyword")
             
-            with col2:
-                is_mandatory = st.checkbox(
-                    "Mandatory",
-                    help="Mandatory skills must be present in candidate profiles"
-                )
-            
-            skill_submitted = st.form_submit_button("Add Skill")
-            
-            if skill_submitted and skill_input:
-                keywords = self.session_state.get('keywords', [])
-                skill_to_add = f"★ {skill_input}" if is_mandatory else skill_input
-                
-                # Check if skill already exists
-                existing_skills = [kw.replace('★ ', '') for kw in keywords]
-                if skill_input not in existing_skills:
-                    keywords.append(skill_to_add)
-                    self.session_state['keywords'] = keywords
+            if form_submit and keyword_input.strip():
+                clean_keyword = keyword_input.strip()
+                if clean_keyword not in [k.replace('★ ', '') for k in self.session_state.get('keywords', [])]:
+                    if make_mandatory:
+                        self.session_state.setdefault('keywords', []).append(f"★ {clean_keyword}")
+                    else:
+                        self.session_state.setdefault('keywords', []).append(clean_keyword)
                     st.experimental_rerun()
         
-        # Display current skills
-        if self.session_state.get('keywords'):
-            st.markdown("**Current Skills:**")
-            for idx, keyword in enumerate(self.session_state['keywords']):
-                col1, col2 = st.columns([4, 1])
-                
-                with col1:
-                    is_mandatory = keyword.startswith('★ ')
-                    display_skill = keyword.replace('★ ', '')
-                    
-                    if is_mandatory:
-                        st.markdown(f"""
-                        <span class="skill-tag mandatory-skill">
-                            ⭐ {display_skill}
-                        </span>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                        <span class="skill-tag">
-                            {display_skill}
-                        </span>
-                        """, unsafe_allow_html=True)
-                
-                with col2:
-                    if st.button("❌", key=f"remove_skill_{idx}", help=f"Remove {display_skill}"):
-                        keywords = self.session_state['keywords']
-                        keywords.pop(idx)
-                        self.session_state['keywords'] = keywords
-                        st.experimental_rerun()
+        # Display current keywords
+        self._display_keywords()
     
     def render_experience_section(self):
-        """Render experience range input."""
-        st.markdown("**Experience Range**")
-        
-        min_exp = st.number_input(
-            "Min Years",
-            min_value=0.0,
-            max_value=50.0,
-            value=self.session_state.get('min_exp', 0.0),
-            step=0.5,
-            help="Minimum years of experience"
-        )
-        
-        max_exp = st.number_input(
-            "Max Years",
-            min_value=0.0,
-            max_value=50.0,
-            value=self.session_state.get('max_exp', 10.0),
-            step=0.5,
-            help="Maximum years of experience"
-        )
+        """Render experience input section."""
+        st.subheader("Experience")
+        min_exp = st.number_input("Min (years)", 
+                                  min_value=0.0, 
+                                  max_value=50.0, 
+                                  value=self.session_state.get('min_exp', 0.0), 
+                                  step=1.0)
+        max_exp = st.number_input("Max (years)", 
+                                  min_value=0.0, 
+                                  max_value=50.0, 
+                                  value=self.session_state.get('max_exp', 10.0), 
+                                  step=1.0)
         
         self.session_state['min_exp'] = min_exp
         self.session_state['max_exp'] = max_exp
         
-        # Validation feedback
         if min_exp > max_exp:
             st.error("Min experience cannot be greater than max experience")
     
     def render_location_section(self):
         """Render location input section."""
-        st.markdown("**Locations**")
+        st.subheader("Location")
         
-        # Location input form
         with st.form(key="location_form", clear_on_submit=True):
-            col1, col2 = st.columns([3, 1])
+            city_input = st.selectbox("Add location", [""] + CITIES)
+            set_as_preferred = st.checkbox("Set as preferred")
             
-            with col1:
-                location_input = st.selectbox(
-                    "Add location",
-                    [""] + CITIES[:30],  # Show top 30 cities
-                    help="Select a city to add to your search"
-                )
+            location_form_submit = st.form_submit_button("Add Location")
             
-            with col2:
-                is_preferred = st.checkbox(
-                    "Preferred",
-                    help="Preferred locations get higher priority in search"
-                )
-            
-            location_submitted = st.form_submit_button("Add Location")
-            
-            if location_submitted and location_input:
-                if is_preferred:
-                    preferred_cities = self.session_state.get('preferred_cities', [])
-                    if location_input not in preferred_cities:
-                        preferred_cities.append(location_input)
-                        self.session_state['preferred_cities'] = preferred_cities
+            if location_form_submit and city_input:
+                if set_as_preferred:
+                    if city_input not in self.session_state.get('preferred_cities', []):
+                        self.session_state.setdefault('preferred_cities', []).append(city_input)
                 else:
-                    current_cities = self.session_state.get('current_cities', [])
-                    if location_input not in current_cities:
-                        current_cities.append(location_input)
-                        self.session_state['current_cities'] = current_cities
-                
+                    if city_input not in self.session_state.get('current_cities', []):
+                        self.session_state.setdefault('current_cities', []).append(city_input)
                 st.experimental_rerun()
         
         # Display current locations
-        all_locations = []
-        for city in self.session_state.get('current_cities', []):
-            all_locations.append((city, False))
-        for city in self.session_state.get('preferred_cities', []):
-            all_locations.append((city, True))
-        
-        if all_locations:
-            st.markdown("**Current Locations:**")
-            for idx, (city, is_preferred) in enumerate(all_locations):
-                col1, col2 = st.columns([4, 1])
-                
-                with col1:
-                    if is_preferred:
-                        st.markdown(f"⭐ {city} (Preferred)")
-                    else:
-                        st.markdown(f"📍 {city}")
-                
-                with col2:
-                    if st.button("❌", key=f"remove_location_{idx}", help=f"Remove {city}"):
-                        if is_preferred:
-                            preferred = self.session_state['preferred_cities']
-                            preferred.remove(city)
-                            self.session_state['preferred_cities'] = preferred
-                        else:
-                            current = self.session_state['current_cities']
-                            current.remove(city)
-                            self.session_state['current_cities'] = current
-                        st.experimental_rerun()
+        self._display_locations()
     
     def render_salary_section(self):
-        """Render salary range input."""
-        st.markdown("**Salary Range (Lakhs)**")
-        
-        min_salary = st.number_input(
-            "Min Salary",
-            min_value=0.0,
-            max_value=100.0,
-            value=self.session_state.get('min_salary', 0.0),
-            step=0.5,
-            help="Minimum salary in lakhs per annum"
-        )
-        
-        max_salary = st.number_input(
-            "Max Salary",
-            min_value=0.0,
-            max_value=100.0,
-            value=self.session_state.get('max_salary', 15.0),
-            step=0.5,
-            help="Maximum salary in lakhs per annum"
-        )
+        """Render salary input section."""
+        st.subheader("Annual Salary")
+        min_salary = st.number_input("Min (lakhs)", 
+                                     min_value=0.0, 
+                                     max_value=100.0, 
+                                     value=self.session_state.get('min_salary', 0.0), 
+                                     step=1.0)
+        max_salary = st.number_input("Max (lakhs)", 
+                                     min_value=0.0, 
+                                     max_value=100.0, 
+                                     value=self.session_state.get('max_salary', 15.0), 
+                                     step=1.0)
         
         self.session_state['min_salary'] = min_salary
         self.session_state['max_salary'] = max_salary
         
-        # Validation feedback
         if min_salary > max_salary:
             st.error("Min salary cannot be greater than max salary")
     
+    def render_search_controls(self):
+        """Render search controls section."""
+        st.subheader("Search Controls")
+        
+        active_options = ["1 day", "15 days", "1 month", "2 months", "3 months", "6 months", "1 year"]
+        st.session_state['active_days'] = st.selectbox(
+            "Active in", 
+            active_options, 
+            index=active_options.index(st.session_state.get('active_days', '1 month'))
+        )
+        
+        st.markdown("")
+        st.markdown("")
+        return st.button("🔍 Search Candidates")
+    
     def validate_form(self) -> List[str]:
-        """Validate the search form and return list of errors."""
+        """Validate search form inputs."""
         errors = []
         
-        # Check required fields
         if not self.session_state.get('recruiter_company', '').strip():
-            errors.append("Company name is required")
+            errors.append("Please enter your company name to proceed with the search.")
         
         if not self.session_state.get('keywords', []):
-            errors.append("At least one skill/keyword is required")
+            errors.append("Please add at least one keyword to search.")
         
-        # Validate ranges
         if self.session_state.get('min_exp', 0) > self.session_state.get('max_exp', 10):
-            errors.append("Minimum experience cannot be greater than maximum experience")
+            errors.append("Minimum experience cannot be greater than maximum experience.")
         
         if self.session_state.get('min_salary', 0) > self.session_state.get('max_salary', 15):
-            errors.append("Minimum salary cannot be greater than maximum salary")
+            errors.append("Minimum salary cannot be greater than maximum salary.")
         
         return errors
+    
+    def _display_keywords(self):
+        """Display current keywords with remove buttons."""
+        if self.session_state.get('keywords', []):
+            st.markdown("**Current Keywords**")
+            for idx, keyword in enumerate(self.session_state['keywords']):
+                display_keyword = keyword.replace('★ ', '') if keyword.startswith('★ ') else keyword
+                is_mandatory = keyword.startswith('★ ')
+                button_text = f"{'★ ' if is_mandatory else ''}✕ {display_keyword}"
+                
+                if st.button(button_text, 
+                           key=f"remove_kw_{idx}", 
+                           help=f"Remove {display_keyword}"):
+                    st.session_state['keywords'].remove(keyword)
+                    st.experimental_rerun()
+    
+    def _display_locations(self):
+        """Display current and preferred locations with remove buttons."""
+        if st.session_state.get('current_cities', []) or st.session_state.get('preferred_cities', []):
+            st.markdown("**Current Locations**")
+            
+            for idx, city in enumerate(st.session_state.get('current_cities', [])):
+                button_text = f"✕ {city}"
+                if st.button(button_text, 
+                           key=f"remove_city_{idx}", 
+                           help=f"Remove {city}"):
+                    st.session_state['current_cities'].remove(city)
+                    st.experimental_rerun()
+            
+            for idx, city in enumerate(st.session_state.get('preferred_cities', [])):
+                button_text = f"★ ✕ {city}"
+                if st.button(button_text, 
+                           key=f"remove_pref_city_{idx}", 
+                           help=f"Remove preferred location {city}"):
+                    st.session_state['preferred_cities'].remove(city)
+                    st.experimental_rerun()

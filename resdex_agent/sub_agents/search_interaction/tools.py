@@ -1,9 +1,12 @@
+# Replace resdx_agent/sub_agents/search_interaction/tools.py with this fixed version
+
 """
 Tools specific to Search Interaction Sub-Agent.
 """
 
 from typing import Dict, Any, List, Optional
 import logging
+
 class Tool:
     """Base tool class."""
     def __init__(self, name: str, description: str = ""):
@@ -25,6 +28,14 @@ class IntentProcessor(Tool):
     async def __call__(self, intent_data: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
         """Process intent data and apply modifications."""
         try:
+            # CRITICAL FIX: Ensure session_state is a dict
+            if not isinstance(session_state, dict):
+                logger.error(f"Session state is not a dict: {type(session_state)}")
+                session_state = {}
+            
+            print(f"🔍 IntentProcessor: Processing intent_data: {intent_data}")
+            print(f"🔍 IntentProcessor: Session state type: {type(session_state)}")
+            
             if isinstance(intent_data, list):
                 return await self._process_multiple_intents(intent_data, session_state)
             else:
@@ -32,6 +43,9 @@ class IntentProcessor(Tool):
                 
         except Exception as e:
             logger.error(f"Intent processing failed: {e}")
+            print(f"❌ Intent processing error: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 "success": False,
                 "error": str(e),
@@ -45,12 +59,15 @@ class IntentProcessor(Tool):
         response_text = intent_data.get("response_text", "")
         trigger_search = intent_data.get("trigger_search", False)
         
+        print(f"🔍 Processing single intent: action={action}, trigger_search={trigger_search}")
+        
         # Import filter tool here to avoid circular imports
         from ...tools.filter_tools import FilterTool
         filter_tool = FilterTool()
         
         # Apply the modification
         if action in ["add_skill", "remove_skill", "modify_experience", "modify_salary", "add_location", "remove_location"]:
+            # CRITICAL FIX: Call filter_tool correctly
             result = await filter_tool(action, session_state, **intent_data)
             
             if result["success"]:
@@ -68,6 +85,35 @@ class IntentProcessor(Tool):
                     "trigger_search": False
                 }
         else:
+            # Handle general queries or non-filter actions
+            if action == "general_query":
+                # Handle sorting and other candidate operations
+                candidates = session_state.get('candidates', [])
+                
+                if "sort" in response_text.lower() and candidates:
+                    if "experience" in response_text.lower():
+                        # Sort by experience
+                        sorted_candidates = sorted(candidates, key=lambda x: x.get("experience", 0), reverse=True)
+                        session_state['candidates'] = sorted_candidates
+                        session_state['page'] = 0  # Reset to first page
+                        return {
+                            "success": True,
+                            "message": "Sorted candidates by experience level (highest first)",
+                            "modifications": ["sort_by_experience"],
+                            "trigger_search": False
+                        }
+                    elif "salary" in response_text.lower():
+                        # Sort by salary
+                        sorted_candidates = sorted(candidates, key=lambda x: x.get("salary", 0), reverse=True)
+                        session_state['candidates'] = sorted_candidates
+                        session_state['page'] = 0  # Reset to first page
+                        return {
+                            "success": True,
+                            "message": "Sorted candidates by salary expectations (highest first)",
+                            "modifications": ["sort_by_salary"],
+                            "trigger_search": False
+                        }
+            
             return {
                 "success": True,
                 "message": response_text or "Request processed",
@@ -81,6 +127,8 @@ class IntentProcessor(Tool):
         all_messages = []
         any_trigger_search = False
         
+        print(f"🔍 Processing {len(intent_list)} multiple intents")
+        
         # Check if any intent wants to trigger search
         for intent_data in intent_list:
             if intent_data.get("trigger_search", False):
@@ -88,7 +136,8 @@ class IntentProcessor(Tool):
                 break
         
         # Process each intent
-        for intent_data in intent_list:
+        for i, intent_data in enumerate(intent_list):
+            print(f"🔍 Processing intent {i+1}: {intent_data}")
             # Prevent individual search triggers for multiple intents
             intent_copy = intent_data.copy()
             intent_copy["trigger_search"] = False
@@ -99,6 +148,9 @@ class IntentProcessor(Tool):
                 all_modifications.extend(result["modifications"])
                 if result["message"]:
                     all_messages.append(result["message"])
+            else:
+                # If any intent fails, return the error
+                return result
         
         # Combine messages
         combined_message = " | ".join(all_messages) if all_messages else f"Applied {len(intent_list)} modifications"
