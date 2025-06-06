@@ -36,6 +36,7 @@ class FilterTool(Tool):
         """Execute filter modification."""
         try:
             logger.info(f"Executing filter action: {action}")
+            print(f"🔧 FilterTool: Action={action}, kwargs={kwargs}")
             
             if action == "add_skill":
                 return await self._add_skill(session_state, **kwargs)
@@ -58,6 +59,9 @@ class FilterTool(Tool):
                 
         except Exception as e:
             logger.error(f"Filter modification failed: {e}")
+            print(f"❌ FilterTool error: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 "success": False,
                 "error": str(e),
@@ -145,23 +149,38 @@ class FilterTool(Tool):
     async def _modify_experience(self, session_state: Dict[str, Any], operation: str, value: Any, **kwargs) -> Dict[str, Any]:
         """Modify experience filters."""
         try:
+            print(f"🔧 Experience modification: operation={operation}, value={value} (type: {type(value)})")
+            
             if operation == "set_range":
-                if "-" in str(value):
-                    min_val, max_val = map(float, str(value).split('-'))
-                    if self.data_processor.validate_experience_range(min_val, max_val):
-                        session_state['min_exp'] = min_val
-                        session_state['max_exp'] = max_val
-                        message = f"Set experience range to {min_val}-{max_val} years"
-                    else:
-                        return {"success": False, "message": "Invalid experience range", "modifications": []}
+                # CRITICAL FIX: Handle range string format "min-max"
+                if isinstance(value, str) and "-" in value:
+                    try:
+                        min_val, max_val = map(float, value.split('-'))
+                        if self.data_processor.validate_experience_range(min_val, max_val):
+                            session_state['min_exp'] = min_val
+                            session_state['max_exp'] = max_val
+                            message = f"Set experience range to {min_val}-{max_val} years"
+                        else:
+                            return {"success": False, "message": "Invalid experience range", "modifications": []}
+                    except ValueError as e:
+                        print(f"❌ Error parsing range string '{value}': {e}")
+                        return {"success": False, "message": f"Invalid experience range format: {value}", "modifications": []}
                 else:
+                    # Handle single value
+                    try:
+                        years = float(value)
+                        session_state['min_exp'] = years
+                        message = f"Set minimum experience to {years} years"
+                    except (ValueError, TypeError) as e:
+                        print(f"❌ Error parsing experience value '{value}': {e}")
+                        return {"success": False, "message": f"Invalid experience value: {value}", "modifications": []}
+            elif operation == "set":
+                try:
                     years = float(value)
                     session_state['min_exp'] = years
                     message = f"Set minimum experience to {years} years"
-            elif operation == "set":
-                years = float(value)
-                session_state['min_exp'] = years
-                message = f"Set minimum experience to {years} years"
+                except (ValueError, TypeError):
+                    return {"success": False, "message": f"Invalid experience value: {value}", "modifications": []}
             else:
                 return {"success": False, "message": f"Unknown operation: {operation}", "modifications": []}
             
@@ -176,29 +195,45 @@ class FilterTool(Tool):
                 }]
             }
             
-        except ValueError:
-            return {"success": False, "message": f"Invalid experience value: {value}", "modifications": []}
+        except Exception as e:
+            print(f"❌ Experience modification error: {e}")
+            return {"success": False, "message": f"Experience modification failed: {e}", "modifications": []}
     
     async def _modify_salary(self, session_state: Dict[str, Any], operation: str, value: Any, **kwargs) -> Dict[str, Any]:
         """Modify salary filters."""
         try:
+            print(f"🔧 Salary modification: operation={operation}, value={value} (type: {type(value)})")
+            
             if operation == "set_range":
-                if "-" in str(value):
-                    min_val, max_val = map(float, str(value).split('-'))
-                    if self.data_processor.validate_salary_range(min_val, max_val):
-                        session_state['min_salary'] = min_val
-                        session_state['max_salary'] = max_val
-                        message = f"Set salary range to {min_val}-{max_val} lakhs"
-                    else:
-                        return {"success": False, "message": "Invalid salary range", "modifications": []}
+                # CRITICAL FIX: Handle range string format "min-max"
+                if isinstance(value, str) and "-" in value:
+                    try:
+                        min_val, max_val = map(float, value.split('-'))
+                        if self.data_processor.validate_salary_range(min_val, max_val):
+                            session_state['min_salary'] = min_val
+                            session_state['max_salary'] = max_val
+                            message = f"Set salary range to {min_val}-{max_val} lakhs"
+                        else:
+                            return {"success": False, "message": "Invalid salary range", "modifications": []}
+                    except ValueError as e:
+                        print(f"❌ Error parsing salary range string '{value}': {e}")
+                        return {"success": False, "message": f"Invalid salary range format: {value}", "modifications": []}
                 else:
+                    # Handle single value
+                    try:
+                        amount = float(value)
+                        session_state['min_salary'] = amount
+                        message = f"Set minimum salary to {amount} lakhs"
+                    except (ValueError, TypeError) as e:
+                        print(f"❌ Error parsing salary value '{value}': {e}")
+                        return {"success": False, "message": f"Invalid salary value: {value}", "modifications": []}
+            elif operation == "set":
+                try:
                     amount = float(value)
                     session_state['min_salary'] = amount
                     message = f"Set minimum salary to {amount} lakhs"
-            elif operation == "set":
-                amount = float(value)
-                session_state['min_salary'] = amount
-                message = f"Set minimum salary to {amount} lakhs"
+                except (ValueError, TypeError):
+                    return {"success": False, "message": f"Invalid salary value: {value}", "modifications": []}
             else:
                 return {"success": False, "message": f"Unknown operation: {operation}", "modifications": []}
             
@@ -213,8 +248,9 @@ class FilterTool(Tool):
                 }]
             }
             
-        except ValueError:
-            return {"success": False, "message": f"Invalid salary value: {value}", "modifications": []}
+        except Exception as e:
+            print(f"❌ Salary modification error: {e}")
+            return {"success": False, "message": f"Salary modification failed: {e}", "modifications": []}
     
     async def _add_location(self, session_state: Dict[str, Any], location: str, mandatory: bool = False, **kwargs) -> Dict[str, Any]:
         """Add a location to search filters."""

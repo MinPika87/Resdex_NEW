@@ -110,59 +110,74 @@ class ChatInterface:
             
             # Show processing indicator
             with st.spinner("🤖 AI is thinking..."):
-                # Prepare content for root agent with proper session state
-                # Convert session_state to regular dict to avoid list indexing issues
-                session_state_dict = {}
-                for key, value in self.session_state.items():
-                    try:
-                        # Ensure all values are serializable
-                        if isinstance(value, (str, int, float, bool, list, dict, type(None))):
-                            session_state_dict[key] = value
-                        else:
-                            session_state_dict[key] = str(value)
-                    except Exception as e:
-                        print(f"⚠️ Skipping session state key {key}: {e}")
-                        continue
+                # CRITICAL FIX: Use new auto-routing system
+                session_state_dict = self._get_clean_session_state()
                 
-                print(f"🔍 Prepared session state: {list(session_state_dict.keys())}")
+                print(f"🔍 Prepared clean session state: {list(session_state_dict.keys())}")
                 
-                # FIXED: Import Content from the right place
+                # ENHANCED: Use auto-routing (no explicit request_type)
                 from ...agent import Content
                 
                 content = Content(data={
-                    "request_type": "search_interaction",
                     "user_input": user_input,
                     "session_state": session_state_dict
+                    # No request_type - let root agent decide via LLM routing
                 })
                 
-                # Process through root agent
+                # Process through enhanced root agent
                 result = await self.root_agent.execute(content)
                 
                 print(f"🔍 Root agent result: {result.data.get('success', False)}")
+                print(f"🔍 Response type: {result.data.get('type', 'unknown')}")
                 
                 if result.data["success"]:
-                    # Update session state with any modifications
-                    if "session_state" in result.data:
-                        updated_state = result.data["session_state"]
-                        if isinstance(updated_state, dict):
-                            for key, value in updated_state.items():
-                                self.session_state[key] = value
-                        else:
-                            print(f"⚠️ Updated session state is not a dict: {type(updated_state)}")
+                    # CRITICAL FIX: Handle different response types
+                    response_type = result.data.get("type", "search_interaction")
                     
-                    # Add AI response to chat
-                    ai_message = result.data.get("message", "Request processed successfully.")
-                    self.session_state['chat_history'].append({
-                        "role": "assistant",
-                        "content": ai_message
-                    })
-                    
-                    # Handle search trigger
-                    if result.data.get("trigger_search", False):
-                        await self._handle_triggered_search(result.data)
+                    if response_type == "general_query":
+                        # Handle general query responses
+                        ai_message = result.data.get("message", "I'm here to help!")
+                        self.session_state['chat_history'].append({
+                            "role": "assistant",
+                            "content": ai_message
+                        })
+                        
+                        # No session state updates for general queries
+                        
+                    else:
+                        # Handle search interaction responses
+                        # CRITICAL FIX: Only update non-Streamlit session state keys
+                        if "session_state" in result.data:
+                            updated_state = result.data["session_state"]
+                            if isinstance(updated_state, dict):
+                                self._update_session_state_safely(updated_state)
+                            else:
+                                print(f"⚠️ Updated session state is not a dict: {type(updated_state)}")
+                        
+                        # Add AI response to chat
+                        ai_message = result.data.get("message", "Request processed successfully.")
+                        self.session_state['chat_history'].append({
+                            "role": "assistant",
+                            "content": ai_message
+                        })
+                        
+                        # Handle search trigger - now managed by root agent
+                        if result.data.get("trigger_search", False):
+                            await self._handle_triggered_search(result.data)
+                        
+                        # Handle automatic search results (from task breakdown)
+                        if "candidates" in result.data.get("session_state", {}):
+                            # Search was already executed by root agent
+                            success_msg = "🎯 Search completed with task breakdown!"
+                            self.session_state['chat_history'].append({
+                                "role": "assistant", 
+                                "content": success_msg
+                            })
                     
                     # Store debug info
-                    if "processing_details" in result.data:
+                    if "task_breakdown" in result.data:
+                        self.session_state['agent_debug_info'] = result.data["task_breakdown"]
+                    elif "processing_details" in result.data:
                         self.session_state['agent_debug_info'] = result.data["processing_details"]
                     
                 else:
@@ -195,6 +210,68 @@ class ChatInterface:
             })
             st.experimental_rerun()
     
+    def _get_clean_session_state(self) -> Dict[str, Any]:
+        """Get session state without Streamlit's internal keys."""
+        # CRITICAL FIX: Filter out Streamlit internal keys
+        streamlit_keys_to_exclude = [
+            # Form submitter keys
+            'FormSubmitter:chat_input_form-Send 💬',
+            'FormSubmitter:keyword_form-Add Keyword',
+            'FormSubmitter:location_form-Add Location',
+            # Button state keys (these change frequently)
+            'call_1', 'call_2', 'call_3', 'call_4', 'call_5',
+            'phone_1', 'phone_2', 'phone_3', 'phone_4', 'phone_5',
+            'email_1', 'email_2', 'email_3', 'email_4', 'email_5',
+            'remove_kw_0', 'remove_city_0'
+        ]
+        
+        # Additional patterns to exclude
+        def should_exclude_key(key: str) -> bool:
+            """Check if a key should be excluded from session state."""
+            # Exclude FormSubmitter keys
+            if key.startswith('FormSubmitter:'):
+                return True
+            # Exclude button state keys with patterns
+            if any(pattern in key for pattern in ['call_', 'phone_', 'email_', 'remove_']):
+                return True
+            return False
+        
+        clean_state = {}
+        for key, value in self.session_state.items():
+            if not should_exclude_key(key):
+                try:
+                    # Ensure all values are serializable
+                    if isinstance(value, (str, int, float, bool, list, dict, type(None))):
+                        clean_state[key] = value
+                    else:
+                        clean_state[key] = str(value)
+                except Exception as e:
+                    print(f"⚠️ Skipping session state key {key}: {e}")
+                    continue
+        
+        return clean_state
+    
+    def _update_session_state_safely(self, updated_state: Dict[str, Any]):
+        """Update session state while avoiding Streamlit internal keys."""
+        # CRITICAL FIX: Only update keys that are safe to modify
+        safe_keys = [
+            'keywords', 'min_exp', 'max_exp', 'min_salary', 'max_salary',
+            'current_cities', 'preferred_cities', 'recruiter_company',
+            'candidates', 'total_results', 'search_applied', 'page',
+            'selected_keywords', 'agent_debug_info', 'active_days',
+            'chat_history'
+        ]
+        
+        for key, value in updated_state.items():
+            if key in safe_keys:
+                try:
+                    self.session_state[key] = value
+                    print(f"✅ Updated session state key: {key}")
+                except Exception as e:
+                    print(f"⚠️ Failed to update session state key {key}: {e}")
+            else:
+                print(f"🔒 Skipped updating protected key: {key}")
+    
     async def _handle_triggered_search(self, result_data: Dict[str, Any]):
         """Handle search triggered by AI agent."""
         try:
@@ -204,7 +281,7 @@ class ChatInterface:
             # Ensure updated_state is a dict
             if not isinstance(updated_state, dict):
                 print(f"⚠️ Updated state is not a dict: {type(updated_state)}")
-                updated_state = dict(self.session_state)
+                updated_state = self._get_clean_session_state()
             
             search_filters = {
                 'keywords': updated_state.get('keywords', []),
@@ -227,7 +304,7 @@ class ChatInterface:
             search_result = await self.root_agent.execute(search_content)
             
             if search_result.data["success"]:
-                # Update candidates and results
+                # Update candidates and results safely
                 self.session_state['candidates'] = search_result.data["candidates"]
                 self.session_state['total_results'] = search_result.data["total_count"]
                 self.session_state['search_applied'] = True

@@ -90,7 +90,6 @@ class StreamlitApp:
     def _render_header(self):
         """Render application header."""
         st.title("🔍 ResDex AI Agent")
-        st.markdown("*Powered by Google ADK - Advanced candidate search with AI assistance*")
         
         # Agent status indicator
         with st.expander("🤖 Agent Status", expanded=False):

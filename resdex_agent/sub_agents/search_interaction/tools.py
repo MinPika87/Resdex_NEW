@@ -67,8 +67,43 @@ class IntentProcessor(Tool):
         
         # Apply the modification
         if action in ["add_skill", "remove_skill", "modify_experience", "modify_salary", "add_location", "remove_location"]:
-            # CRITICAL FIX: Call filter_tool correctly
-            result = await filter_tool(action, session_state, **intent_data)
+            # CRITICAL FIX: Extract parameters properly to avoid argument conflicts
+            
+            # Prepare parameters for FilterTool
+            filter_params = {}
+            
+            if action in ["add_skill", "remove_skill"]:
+                filter_params["skill"] = intent_data.get("value", "")
+                if "mandatory" in intent_data:
+                    filter_params["mandatory"] = intent_data.get("mandatory", False)
+            
+            elif action in ["modify_experience", "modify_salary"]:
+                filter_params["operation"] = intent_data.get("operation", "set")
+                value = intent_data.get("value", "")
+                
+                # CRITICAL FIX: Handle dictionary values for range operations
+                if isinstance(value, dict):
+                    if "min" in value and "max" in value:
+                        # Convert dict to range string format "min-max"
+                        filter_params["value"] = f"{value['min']}-{value['max']}"
+                    elif "min" in value:
+                        filter_params["value"] = str(value["min"])
+                    elif "max" in value:
+                        filter_params["value"] = str(value["max"])
+                    else:
+                        filter_params["value"] = str(value)
+                else:
+                    filter_params["value"] = str(value) if value else ""
+            
+            elif action in ["add_location", "remove_location"]:
+                filter_params["location"] = intent_data.get("value", "")
+                if "mandatory" in intent_data:
+                    filter_params["mandatory"] = intent_data.get("mandatory", False)
+            
+            print(f"🔍 Calling FilterTool with action='{action}' and params: {filter_params}")
+            
+            # FIXED: Call filter_tool correctly without argument conflicts
+            result = await filter_tool(action, session_state, **filter_params)
             
             if result["success"]:
                 return {

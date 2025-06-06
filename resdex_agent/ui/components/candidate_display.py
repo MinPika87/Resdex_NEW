@@ -1,7 +1,7 @@
-# Replace resdx_agent/ui/components/candidate_display.py with this fixed version for Streamlit 1.12
+# Replace resdx_agent/ui/components/candidate_display.py with this cleaned version
 
 """
-Candidate display component for ResDex Agent UI - Compatible with Streamlit 1.12
+Candidate display component for ResDex Agent UI - Cleaned version without unwanted elements
 """
 
 import streamlit as st
@@ -21,7 +21,7 @@ class CandidateDisplay:
         total_results = self.session_state.get('total_results', 0)
         selected_keywords = self.session_state.get('selected_keywords', [])
         
-        # Results header
+        # Results header (REMOVED save search button)
         self._render_results_header(total_results, selected_keywords)
         
         # Pagination info
@@ -38,7 +38,7 @@ class CandidateDisplay:
         self._render_pagination_controls(len(candidates))
     
     def _render_results_header(self, total_results: int, selected_keywords: List[str]):
-        """Render results header with summary."""
+        """Render results header with summary (REMOVED save search button)."""
         keywords_text = ", ".join([kw.replace("★ ", "") for kw in selected_keywords])
         st.markdown(f"""
         <div style="color: #1f77b4; font-weight: bold; font-size: 1.1rem; margin-bottom: 1rem;">
@@ -46,11 +46,10 @@ class CandidateDisplay:
         </div>
         """, unsafe_allow_html=True)
         
-        if st.button("💾 Save Search"):
-            st.success("Search saved successfully!")
+        # REMOVED: Save Search button
     
     def _render_candidate_card(self, candidate: Dict[str, Any], index: int):
-        """Render a single candidate card."""
+        """Render a single candidate card (CLEANED VERSION)."""
         with st.container():
             st.markdown(f"""
             <div class="candidate-card">
@@ -63,7 +62,7 @@ class CandidateDisplay:
                 </div>
             """, unsafe_allow_html=True)
             
-            # Professional details
+            # Professional details (REMOVED previous company/role)
             self._render_professional_details(candidate)
             
             # Skills section
@@ -72,20 +71,17 @@ class CandidateDisplay:
             # Preferred locations
             self._render_preferred_locations(candidate)
             
-            # Action buttons - FIXED: No nested columns for Streamlit 1.12
-            self._render_action_buttons(candidate, index)
+            # REMOVED: Action buttons (View Phone, Call Candidate, Send Email)
             
-            # Footer stats
-            self._render_candidate_footer(candidate)
+            # REMOVED: Footer stats (views, applications, etc.)
             
             st.markdown("</div>", unsafe_allow_html=True)
     
     def _render_professional_details(self, candidate: Dict[str, Any]):
-        """Render professional experience details."""
+        """Render professional experience details (REMOVED previous role)."""
         current_role = candidate.get('current_role', 'Not specified')
         current_company = candidate.get('current_company', 'Not specified')
-        previous_role = candidate.get('previous_role', 'Not specified')
-        previous_company = candidate.get('previous_company', 'Not specified')
+        # REMOVED: previous_role and previous_company
         education = candidate.get('education_display', 'Not specified')
         experience = candidate.get('experience', 0)
         
@@ -103,12 +99,11 @@ class CandidateDisplay:
             <strong>Current:</strong> {current_html} at {current_company} ({experience} years exp)
         </div>
         <div style="margin: 0.5rem 0;">
-            <strong>Previous:</strong> {previous_role} at {previous_company}
-        </div>
-        <div style="margin: 0.5rem 0;">
             <strong>Education:</strong> {education}
         </div>
         """, unsafe_allow_html=True)
+        
+        # REMOVED: Previous role section
     
     def _render_skills_section(self, candidate: Dict[str, Any]):
         """Render candidate skills with highlighting."""
@@ -164,43 +159,11 @@ class CandidateDisplay:
         </div>
         """, unsafe_allow_html=True)
     
-    def _render_action_buttons(self, candidate: Dict[str, Any], index: int):
-        """Render action buttons for candidate - FIXED for Streamlit 1.12."""
-        # FIXED: Simple buttons without nested columns
-        if st.button("📞 View Phone", key=f"phone_{index}"):
-            st.info("Phone number revealed!")
-        
-        if st.button("💬 Call Candidate", key=f"call_{index}"):
-            st.info("Initiating call...")
-        
-        if st.button("📧 Send Email", key=f"email_{index}"):
-            st.info("Email composer opened!")
-    
-    def _render_candidate_footer(self, candidate: Dict[str, Any]):
-        """Render candidate footer with stats and actions."""
-        views = candidate.get('views', 0)
-        applications = candidate.get('applications', 0)
-        last_modified = candidate.get('last_modified', '2025-01-01')
-        last_active = candidate.get('last_active', '2025-01-01')
-        similar_profiles = candidate.get('similar_profiles', 100)
-        
-        st.markdown(f"""
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.5rem; border-top: 1px solid #e9ecef;">
-            <div style="font-size: 0.875rem; color: #6c757d;">
-                👁️ {views} views • 📄 {applications} applications • Modified {last_modified[:10]} • Active {last_active[:10]}
-            </div>
-            <div style="font-size: 0.875rem;">
-                <a href="#" style="color: #007bff; text-decoration: none; margin-right: 1rem;">Comment</a>
-                <a href="#" style="color: #007bff; text-decoration: none;">Save</a>
-            </div>
-        </div>
-        <div style="margin-top: 0.25rem;">
-            <a href="#" style="color: #007bff; text-decoration: none; font-size: 0.875rem;">{similar_profiles} similar profiles</a>
-        </div>
-        """, unsafe_allow_html=True)
+    # REMOVED: _render_action_buttons method entirely
+    # REMOVED: _render_candidate_footer method entirely
     
     def _render_pagination_controls(self, total_candidates: int):
-        """Render pagination controls - FIXED for Streamlit 1.12."""
+        """Render pagination controls."""
         if total_candidates <= self.page_size:
             return
         
@@ -209,7 +172,6 @@ class CandidateDisplay:
         
         st.markdown("---")
         
-        # FIXED: Simple layout without nested columns
         # Previous button
         if st.button("⬅️ Previous", disabled=current_page <= 0):
             self.session_state['page'] = max(0, current_page - 1)
