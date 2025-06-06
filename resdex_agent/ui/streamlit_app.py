@@ -38,7 +38,6 @@ class StreamlitApp:
         # Page configuration
         st.set_page_config(
             page_title="ResDex AI Agent",
-            page_icon="🔍",
             layout="wide"
         )
         
@@ -102,36 +101,46 @@ class StreamlitApp:
                     st.error("❌ System issues detected")
                     st.json(health_status)
     
+    # Update the _render_main_content method in streamlit_app.py
+
     def _render_main_content(self):
-        """Render main content area - FIXED for Streamlit 1.12."""
+        """Render main content area with compact layout."""
         # Search form
         with st.container():
             st.markdown("### Search Configuration")
             
-            # Company input
+            # Company input (full width, compact validation)
             self.search_form.render_company_input()
             
-            # FIXED: Use tabs instead of nested columns for Streamlit 1.12
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["Keywords", "Experience", "Location", "Salary", "Search"])
+            # REDUCED GAP: Remove extra separator, use smaller spacing
+            st.markdown("<div style='margin: 0.5rem 0;'></div>", unsafe_allow_html=True)
             
-            with tab1:
+            # Create 5 columns for the search filters
+            col1, col2, col3, col4, col5 = st.columns(5)
+            
+            with col1:
+                st.markdown("**Keywords**")
                 self.search_form.render_keywords_section()
             
-            with tab2:
+            with col2:
+                st.markdown("**Experience**")
                 self.search_form.render_experience_section()
             
-            with tab3:
+            with col3:
+                st.markdown("**Location**")
                 self.search_form.render_location_section()
             
-            with tab4:
+            with col4:
+                st.markdown("**Salary**")
                 self.search_form.render_salary_section()
             
-            with tab5:
+            with col5:
+                st.markdown("**Search**")
                 search_button = self.search_form.render_search_controls()
                 if search_button:
                     asyncio.run(self._handle_search_request())
         
-        # Results section
+        # Results section (unchanged)
         st.markdown("---")
         
         if st.session_state['search_applied']:
@@ -142,21 +151,95 @@ class StreamlitApp:
                 st.warning("No candidates found. Try adjusting your search criteria.")
         else:
             st.info("👆 Configure your search criteria above and click 'Search Candidates' to get started.")
-    
+
     def _render_sidebar(self):
-        """Render sidebar with chat interface."""
         with st.sidebar:
-            if st.session_state['candidates']:
-                self.chat_interface.render()
+            # Show request object ONLY when no search has been performed
+            if not st.session_state.get('search_applied', False):
+                # Show current request object and stats before search
+                st.markdown("### 🔧 Current Search Request")
+                
+                # Build current request object dynamically
+                current_request = self._build_current_request_object()
+                
+                # Display as collapsible JSON
+                with st.expander("View Request Object", expanded=False):
+                    st.json(current_request)
+                
+                # Show search stats
+                self._render_search_stats()
+                
+                # Info message
+                st.info("🤖 AI Assistant will appear here after you search for candidates.")
+            
             else:
-                st.markdown("### 🔧 Debug Info")
-                if st.session_state.get('agent_debug_info'):
-                    st.json(st.session_state['agent_debug_info'])
+                # After search: Show ONLY the chat interface
+                if st.session_state['candidates']:
+                    self.chat_interface.render()
                 else:
-                    st.info("Debug information will appear here after agent interactions.")
+                    # No candidates found case
+                    st.markdown("### 🤖 AI Assistant")
+                    st.warning("No candidates found with current criteria.")
+                    st.info("Try adjusting your search filters and search again.")
+                    
+                    # Option to show request object for debugging
+                    with st.expander("🔧 Debug: View Last Search Request", expanded=False):
+                        if 'last_search_request' in st.session_state:
+                            st.json(st.session_state['last_search_request'])
+                        else:
+                            st.text("No search request available")
+
+    def _build_current_request_object(self):
+        # FIXED: Use absolute import instead of relative import
+        from resdex_agent.utils.api_client import api_client
+        
+        # Create a mock session state with current form values
+        current_state = {
+            'keywords': st.session_state.get('keywords', []),
+            'min_exp': st.session_state.get('min_exp', 0.0),
+            'max_exp': st.session_state.get('max_exp', 10.0),
+            'min_salary': st.session_state.get('min_salary', 0.0),
+            'max_salary': st.session_state.get('max_salary', 15.0),
+            'current_cities': st.session_state.get('current_cities', []),
+            'preferred_cities': st.session_state.get('preferred_cities', []),
+            'recruiter_company': st.session_state.get('recruiter_company', ''),
+            'active_days': st.session_state.get('active_days', '1 month')
+        }
+        
+        # Build the request object
+        return api_client.build_search_request(current_state)
+
+    def _render_search_stats(self):
+        """Render quick search statistics."""
+        # Count current filters
+        keywords_count = len(st.session_state.get('keywords', []))
+        locations_count = (len(st.session_state.get('current_cities', [])) + 
+                        len(st.session_state.get('preferred_cities', [])))
+        
+        # Quick stats
+        st.markdown("**Quick Stats:**")
+        st.markdown(f"• Keywords: {keywords_count}")
+        st.markdown(f"• Locations: {locations_count}")
+        st.markdown(f"• Experience: {st.session_state.get('min_exp', 0)}-{st.session_state.get('max_exp', 10)} years")
+        st.markdown(f"• Salary: {st.session_state.get('min_salary', 0)}-{st.session_state.get('max_salary', 15)} lakhs")
+        
+        # Search readiness indicator
+        company = st.session_state.get('recruiter_company', '').strip()
+        has_keywords = keywords_count > 0
+        
+        if company and has_keywords:
+            st.success("✅ Ready to search!")
+        elif not company:
+            st.warning("⚠️ Company name required")
+        elif not has_keywords:
+            st.warning("⚠️ Add at least one keyword")
+        else:
+            st.info("📝 Configure search criteria")
     
+    # Update the _handle_search_request method in streamlit_app.py
+
     async def _handle_search_request(self):
-        """Handle search button click."""
+        """Handle search button click - Fetch 100, display 20, paginate 5 per page."""
         try:
             # Validate search form
             validation_errors = self.search_form.validate_form()
@@ -167,7 +250,10 @@ class StreamlitApp:
                 return
             
             with st.spinner("🔍 Searching candidates..."):
-                # Prepare search filters
+                # Build current request object
+                current_request = self._build_current_request_object()
+                
+                # FIXED: Fetch 100 candidates, display 20 initially
                 search_filters = {
                     'keywords': st.session_state['keywords'],
                     'min_exp': st.session_state['min_exp'],
@@ -176,7 +262,8 @@ class StreamlitApp:
                     'max_salary': st.session_state['max_salary'],
                     'current_cities': st.session_state['current_cities'],
                     'preferred_cities': st.session_state['preferred_cities'],
-                    'recruiter_company': st.session_state['recruiter_company']
+                    'recruiter_company': st.session_state['recruiter_company'],
+                    'max_candidates': 100  # FIXED: Fetch 100 candidates
                 }
                 
                 # Execute search through root agent
@@ -188,25 +275,41 @@ class StreamlitApp:
                 result = await self.root_agent.execute(content)
                 
                 if result.data["success"]:
-                    # Update session state with results
-                    st.session_state['candidates'] = result.data["candidates"]
-                    st.session_state['total_results'] = result.data["total_count"]
+                    all_candidates = result.data["candidates"]
+                    total_results = result.data["total_count"]
+                    
+                    # FIXED: Store all candidates but display only first 20
+                    st.session_state['all_candidates'] = all_candidates  # Store all 100
+                    st.session_state['displayed_candidates'] = all_candidates[:20]  # Display first 20
+                    st.session_state['display_batch_size'] = 20  # Current display batch size
+                    st.session_state['candidates'] = all_candidates[:20]  # For compatibility
+                    st.session_state['total_results'] = total_results
                     st.session_state['search_applied'] = True
                     st.session_state['selected_keywords'] = st.session_state['keywords'].copy()
-                    st.session_state['page'] = 0
+                    st.session_state['page'] = 0  # Reset to first page
                     
                     # Clear chat history for new search
                     st.session_state['chat_history'] = []
                     
-                    # Add welcome message directly to session state
-                    if st.session_state['candidates']:
-                        welcome_msg = f"🎉 Found {len(st.session_state['candidates'])} candidates from {st.session_state['total_results']:,} total matches! How can I help you analyze these results?"
+                    # FIXED: AI mentions TOTAL search results only
+                    if all_candidates:
+                        # Create search summary
+                        search_summary = self._create_search_summary(current_request, result.data)
+                        
+                        # FIXED: Welcome message mentions total results, not displayed count
+                        welcome_msg = f"🎉 Search completed! Found {total_results:,} total matches.\n\n{search_summary}\n\nShowing top candidates with 5 per page. Ask me to 'show more candidates' to see additional results!"
+                        
                         st.session_state['chat_history'].append({
                             "role": "assistant",
                             "content": welcome_msg
                         })
+                        
+                        # Store the request object for AI context
+                        st.session_state['last_search_request'] = current_request
                     
-                    st.success(result.data["message"])
+                    fetched_count = len(all_candidates)
+                    displayed_count = len(st.session_state['displayed_candidates'])
+                    st.success(f"✅ Found {total_results:,} total matches. Fetched {fetched_count} candidates, displaying first {displayed_count}.")
                     
                     # Store debug info
                     st.session_state['agent_debug_info'] = result.data.get("root_agent", {})
@@ -216,12 +319,83 @@ class StreamlitApp:
                     if 'details' in result.data:
                         st.error(f"Details: {result.data['details']}")
                 
-                # FIXED: Use experimental_rerun for Streamlit 1.12
+                # Use experimental_rerun for Streamlit 1.12
                 st.experimental_rerun()
                 
         except Exception as e:
             logger.error(f"Search request failed: {e}")
             st.error(f"❌ An unexpected error occurred: {str(e)}")
+
+    # Add this new method to handle "show more" functionality
+    def _handle_show_more_candidates(self):
+        """Show more candidates from the already fetched pool."""
+        all_candidates = st.session_state.get('all_candidates', [])
+        current_display_size = st.session_state.get('display_batch_size', 20)
+        
+        # Calculate new display size (add 20 more)
+        new_display_size = min(current_display_size + 20, len(all_candidates))
+        
+        if new_display_size > current_display_size:
+            # Update displayed candidates
+            st.session_state['displayed_candidates'] = all_candidates[:new_display_size]
+            st.session_state['candidates'] = all_candidates[:new_display_size]  # For compatibility
+            st.session_state['display_batch_size'] = new_display_size
+            st.session_state['page'] = 0  # Reset to first page
+            
+            # Add AI response
+            newly_added = new_display_size - current_display_size
+            ai_response = f"✅ Showing {newly_added} more candidates! Now displaying {new_display_size} candidates total."
+            st.session_state['chat_history'].append({
+                "role": "assistant",
+                "content": ai_response
+            })
+            
+            return True
+        else:
+            # No more candidates to show
+            ai_response = f"ℹ️ Already showing all {len(all_candidates)} fetched candidates. This represents the top results from {st.session_state.get('total_results', 0):,} total matches."
+            st.session_state['chat_history'].append({
+                "role": "assistant",
+                "content": ai_response
+            })
+            
+            return False
+
+    def _create_search_summary(self, request_object: dict, search_result: dict) -> str:
+        """Create a human-readable search summary for the chat."""
+        keywords = st.session_state.get('keywords', [])
+        locations = (st.session_state.get('current_cities', []) + 
+                    st.session_state.get('preferred_cities', []))
+        
+        summary_parts = []
+        
+        # Keywords summary
+        if keywords:
+            mandatory_skills = [k.replace('★ ', '') for k in keywords if k.startswith('★ ')]
+            optional_skills = [k for k in keywords if not k.startswith('★ ')]
+            
+            if mandatory_skills:
+                summary_parts.append(f"**Required Skills:** {', '.join(mandatory_skills)}")
+            if optional_skills:
+                summary_parts.append(f"**Optional Skills:** {', '.join(optional_skills)}")
+        
+        # Experience summary
+        min_exp = st.session_state.get('min_exp', 0)
+        max_exp = st.session_state.get('max_exp', 10)
+        if min_exp > 0 or max_exp < 50:
+            summary_parts.append(f"**Experience:** {min_exp}-{max_exp} years")
+        
+        # Salary summary
+        min_sal = st.session_state.get('min_salary', 0)
+        max_sal = st.session_state.get('max_salary', 15)
+        if min_sal > 0 or max_sal < 100:
+            summary_parts.append(f"**Salary:** {min_sal}-{max_sal} lakhs")
+        
+        # Location summary
+        if locations:
+            summary_parts.append(f"**Locations:** {', '.join(locations)}")
+        
+        return "\n".join(summary_parts) if summary_parts else "Basic search criteria applied."
     
     async def _check_agent_health(self) -> Dict[str, Any]:
         """Check agent health status."""

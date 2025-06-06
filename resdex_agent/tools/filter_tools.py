@@ -1,4 +1,3 @@
-# Replace the content of resdex_agent/tools/filter_tools.py
 
 """
 Filter management tools for ResDex Agent.
@@ -152,7 +151,6 @@ class FilterTool(Tool):
             print(f"🔧 Experience modification: operation={operation}, value={value} (type: {type(value)})")
             
             if operation == "set_range":
-                # CRITICAL FIX: Handle range string format "min-max"
                 if isinstance(value, str) and "-" in value:
                     try:
                         min_val, max_val = map(float, value.split('-'))
@@ -166,7 +164,6 @@ class FilterTool(Tool):
                         print(f"❌ Error parsing range string '{value}': {e}")
                         return {"success": False, "message": f"Invalid experience range format: {value}", "modifications": []}
                 else:
-                    # Handle single value
                     try:
                         years = float(value)
                         session_state['min_exp'] = years
@@ -205,7 +202,6 @@ class FilterTool(Tool):
             print(f"🔧 Salary modification: operation={operation}, value={value} (type: {type(value)})")
             
             if operation == "set_range":
-                # CRITICAL FIX: Handle range string format "min-max"
                 if isinstance(value, str) and "-" in value:
                     try:
                         min_val, max_val = map(float, value.split('-'))
@@ -219,7 +215,6 @@ class FilterTool(Tool):
                         print(f"❌ Error parsing salary range string '{value}': {e}")
                         return {"success": False, "message": f"Invalid salary range format: {value}", "modifications": []}
                 else:
-                    # Handle single value
                     try:
                         amount = float(value)
                         session_state['min_salary'] = amount
@@ -320,4 +315,4 @@ class FilterTool(Tool):
                 "success": False,
                 "message": f"'{normalized_location}' was not found in location filters",
                 "modifications": []
-            }
+            }        

@@ -15,19 +15,26 @@ class CandidateDisplay:
         self.session_state = session_state
         self.page_size = 5
     
+    # Update the candidate_display.py render_results method
+
     def render_results(self):
-        """Render the complete results section."""
-        candidates = self.session_state.get('candidates', [])
+        """Render the complete results section - FIXED for batch display system."""
+        # Use displayed_candidates instead of all candidates
+        candidates = self.session_state.get('displayed_candidates', [])
         total_results = self.session_state.get('total_results', 0)
+        all_candidates_count = len(self.session_state.get('all_candidates', []))
         selected_keywords = self.session_state.get('selected_keywords', [])
         
-        # Results header (REMOVED save search button)
-        self._render_results_header(total_results, selected_keywords)
+        # Results header with batch info
+        self._render_results_header_with_batch_info(total_results, selected_keywords, len(candidates), all_candidates_count)
         
-        # Pagination info
+        # FIXED: Pagination - 5 per page consistently
+        page_size = 5
         current_page = self.session_state.get('page', 0)
-        start_idx = current_page * self.page_size
-        end_idx = min(start_idx + self.page_size, len(candidates))
+        start_idx = current_page * page_size
+        end_idx = min(start_idx + page_size, len(candidates))
+        
+        # Get current page candidates
         page_candidates = candidates[start_idx:end_idx]
         
         # Display candidates
@@ -35,7 +42,51 @@ class CandidateDisplay:
             self._render_candidate_card(candidate, i)
         
         # Pagination controls
-        self._render_pagination_controls(len(candidates))
+        self._render_pagination_controls_with_batch_info(len(candidates), page_size)
+
+    def _render_results_header_with_batch_info(self, total_results: int, selected_keywords: List[str], displayed_count: int, fetched_count: int):
+        """Render results header with batch information."""
+        keywords_text = ", ".join([kw.replace("★ ", "") for kw in selected_keywords])
+        
+        # Main result summary
+        st.markdown(f"""
+        <div style="color: #1f77b4; font-weight: bold; font-size: 1.1rem; margin-bottom: 0.5rem;">
+            🎯AI Found: {total_results:,} total matches for {keywords_text}
+        </div>
+        """, unsafe_allow_html=True)
+
+    def _render_pagination_controls_with_batch_info(self, total_candidates: int, page_size: int):
+        """Render pagination controls with batch information."""
+        if total_candidates <= page_size:
+            return
+        
+        current_page = self.session_state.get('page', 0)
+        total_pages = (total_candidates - 1) // page_size + 1
+        
+        st.markdown("---")
+        
+        # Previous button
+        if st.button("⬅️ Previous", disabled=current_page <= 0):
+            self.session_state['page'] = max(0, current_page - 1)
+            st.experimental_rerun()
+        
+        # Page info with batch context
+        start_idx = current_page * page_size + 1
+        end_idx = min((current_page + 1) * page_size, total_candidates)
+        all_candidates_count = len(self.session_state.get('all_candidates', []))
+        
+        st.markdown(f"""
+        <div style="text-align: center; padding: 0.5rem;">
+            Showing {start_idx}-{end_idx} of {total_candidates} displayed candidates<br>
+            <small>Page {current_page + 1} of {total_pages} | {all_candidates_count} fetched total</small>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Next button
+        if st.button("Next ➡️", disabled=(current_page + 1) * page_size >= total_candidates):
+            self.session_state['page'] = current_page + 1
+            st.experimental_rerun()
+        
     
     def _render_results_header(self, total_results: int, selected_keywords: List[str]):
         """Render results header with summary (REMOVED save search button)."""

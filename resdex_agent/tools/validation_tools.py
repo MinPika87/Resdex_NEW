@@ -1,5 +1,3 @@
-# Replace the content of resdex_agent/tools/validation_tools.py
-
 """
 Validation tools for ResDex Agent.
 """

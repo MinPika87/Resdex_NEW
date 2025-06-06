@@ -1,12 +1,9 @@
 """
-LLM interaction tools for ResDex Agent - Fixed with streaming and proper OpenAI client.
+LLM interaction tools for ResDex Agent.
 """
-
 from typing import Dict, Any, List, Optional, Union
 import logging
 import json
-
-# Simple Tool base class for Google ADK compatibility
 class Tool:
     """Base tool class."""
     def __init__(self, name: str, description: str = ""):
@@ -16,7 +13,6 @@ class Tool:
     async def __call__(self, **kwargs) -> Dict[str, Any]:
         raise NotImplementedError
 
-# CRITICAL FIX: Use OpenAI client as shown by your senior
 from openai import OpenAI
 from ..config import config
 from ..utils.data_processing import DataProcessor
@@ -26,16 +22,14 @@ logger = logging.getLogger(__name__)
 
 class LLMTool(Tool):
     """Tool for LLM interactions and intent extraction using Qwen API with streaming."""
-    
     def __init__(self, name: str = "llm_tool"):
         super().__init__(name=name, description="Process natural language using Qwen LLM with streaming")
         
-        # CRITICAL FIX: Use OpenAI client as recommended by your senior
-        self.api_key = config.llm.api_key  # Should be "llama3-token"
-        self.base_url = config.llm.base_url  # Should be "http://10.10.112.193:8000/v1"
-        self.model_name = config.llm.model  # Should be "Qwen/Qwen3-32B"
-        self.temperature = config.llm.temperature  # Should be 0.4
-        self.max_tokens = config.llm.max_tokens  # Should be 4000
+        self.api_key = config.llm.api_key  
+        self.base_url = config.llm.base_url 
+        self.model_name = config.llm.model  
+        self.temperature = config.llm.temperature  
+        self.max_tokens = config.llm.max_tokens 
         
         # Initialize OpenAI client
         self.client = OpenAI(
@@ -45,7 +39,6 @@ class LLMTool(Tool):
         
         self.data_processor = DataProcessor()
         
-        # Log the configuration to ensure we're using Qwen
         logger.info(f"LLM Tool initialized with OpenAI client:")
         logger.info(f"  API Base URL: {self.base_url}")
         logger.info(f"  Model: {self.model_name}")
@@ -86,7 +79,6 @@ class LLMTool(Tool):
                 n=1
             )
             
-            # Collect streaming response
             full_response = ""
             print(f"📡 LLM RESPONSE ({task}):")
             
@@ -98,10 +90,8 @@ class LLMTool(Tool):
             
             print(f"\n✅ STREAMING COMPLETE - Length: {len(full_response)} characters")
             
-            # Clean response
             cleaned_response = self._clean_llm_response(full_response)
             
-            # Try to parse as JSON for structured tasks
             if task in ["routing", "task_breakdown"]:
                 parsed_data = self.data_processor.extract_json_from_text(cleaned_response)
                 if parsed_data:
@@ -118,7 +108,6 @@ class LLMTool(Tool):
                         "raw_response": full_response
                     }
             else:
-                # For general conversation, return the text response
                 return {
                     "success": True,
                     "response_text": cleaned_response,
@@ -150,19 +139,17 @@ class LLMTool(Tool):
             print(f"  - User Input: '{user_input}'")
             print(f"  - Streaming: Enabled")
             
-            # CRITICAL FIX: Use OpenAI client with streaming as shown by your senior
             completion = self.client.chat.completions.create(
                 model=self.model_name,
-                messages=messages,
+                messages=messages,  
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
-                stream=True,  # Enable streaming
+                stream=True, 
                 presence_penalty=0,
                 top_p=0.6,
                 n=1
             )
             
-            # Collect streaming response
             full_response = ""
             print(f"📡 QWEN STREAMING RESPONSE:")
             
@@ -170,18 +157,15 @@ class LLMTool(Tool):
                 if chunk.choices[0].delta.content is not None:
                     content = chunk.choices[0].delta.content
                     full_response += content
-                    print(content, end='', flush=True)  # Real-time streaming output
+                    print(content, end='', flush=True)  
             
             print(f"\n✅ STREAMING COMPLETE - Total length: {len(full_response)} characters")
-            
-            # CRITICAL FIX: Clean the response to remove thinking tags and extra content
             cleaned_response = self._clean_llm_response(full_response)
             print(f"🧹 CLEANED RESPONSE: {cleaned_response}")
             
             logger.info(f"Qwen streaming response completed: {len(full_response)} characters")
             
             if cleaned_response.strip():
-                # Parse the response
                 intent_data = self.data_processor.extract_json_from_text(cleaned_response)
                 
                 if intent_data:
@@ -248,10 +232,11 @@ TRIGGER_SEARCH LOGIC - SIMPLIFIED:
 - If user request starts with "search with" or "find" or "show me": SET trigger_search=true for ALL actions
 - If user request is just modifications without "search": SET trigger_search=false for ALL actions
 - For multiple actions: ALL actions get same trigger_search value
+- If the user asks "filter by" : SET trigger_search=true for ALL actions
 
 MANDATORY vs OPTIONAL:
-- mandatory=true for: "mandatory", "required", "must have", "should have", "essential"
-- mandatory=false for: "optional", "nice to have", "preferred", default case
+- mandatory=true for: "mandatory", "required", "must have", "should have", "essential", "permanent"
+- mandatory=false for: "optional", "nice to have", default case
 
 VALUE FORMATS:
 - Skills: "Python", "Java" (clean skill names)
@@ -278,27 +263,16 @@ Output: [
 Return ONLY the JSON response."""
     
     def _clean_llm_response(self, response: str) -> str:
-        """Clean LLM response by removing thinking tags and extra content."""
         import re
-        
-        # Remove <think>...</think> tags and their content
         cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-        
-        # Remove any leading/trailing whitespace
         cleaned = cleaned.strip()
-        
-        # Find JSON content (array or object)
-        # Look for array first
         array_match = re.search(r'\[.*\]', cleaned, re.DOTALL)
         if array_match:
             return array_match.group(0).strip()
-        
-        # Look for object
         object_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
         if object_match:
             return object_match.group(0).strip()
         
-        # If no JSON found, return cleaned response
         return cleaned
     
     def _default_intent_response(self, user_input: str) -> Dict[str, Any]:
@@ -311,4 +285,4 @@ Return ONLY the JSON response."""
             "mandatory": False,
             "response_text": f"I understand you're asking about: '{user_input}'. Could you please rephrase your request?",
             "trigger_search": False
-        }
+        }   

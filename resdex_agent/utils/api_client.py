@@ -137,9 +137,10 @@ class APIClient:
     async def normalize_location(self, city: str) -> Optional[str]:
         """Get normalized location ID for a city."""
         return self.get_normalized_location_id(city)
-    
+    # Update the build_search_request method in api_client.py
+
     def build_search_request(self, session_state: Dict[str, Any]) -> Dict[str, Any]:
-        """Build the API request object based on current session state"""
+        """Build the API request object based on current session state - FIXED for more candidates."""
         print(f"🔧 Building search request with session state...")
         print(f"🔹 Keywords: {session_state.get('keywords', [])}")
         print(f"🔹 Experience: {session_state.get('min_exp', 0)}-{session_state.get('max_exp', 10)}")
@@ -147,6 +148,7 @@ class APIClient:
         print(f"🔹 Current Cities: {session_state.get('current_cities', [])}")
         print(f"🔹 Preferred Cities: {session_state.get('preferred_cities', [])}")
         print(f"🔹 Company: {session_state.get('recruiter_company', '')}")
+        print(f"🔹 Max Candidates Requested: {session_state.get('max_candidates', 100)}")
         
         # Get city IDs using working version logic
         city_ids = []
@@ -196,6 +198,15 @@ class APIClient:
         # Create base request copy
         request_object = BASE_API_REQUEST.copy()
         
+        # FIXED: Calculate search count based on requested candidates
+        max_candidates = session_state.get('max_candidates', 100)
+        
+        # FIXED: Request significantly more from API to ensure we get enough results
+        # API might filter out candidates, so request 3-5x more than needed
+        api_search_count = max(200, max_candidates * 5)  # At least 200, up to 5x requested
+        
+        print(f"🎯 REQUESTING {api_search_count} candidates from API (target: {max_candidates})")
+        
         # Update with session state values using working version logic
         request_object.update({
             "city": city_ids,
@@ -211,13 +222,20 @@ class APIClient:
             "min_ctc": str(session_state.get('min_salary', 0)) if session_state.get('min_salary', 0) > 0 else "0",
             "max_ctc": str(session_state.get('max_salary', 0)) if session_state.get('max_salary', 0) > 0 else "15.0",
             "days_old": self.get_days_old_mapping(session_state.get('active_days', '1 month')),
-            "recruiter_company": session_state.get('recruiter_company', '')
+            "recruiter_company": session_state.get('recruiter_company', ''),
+            
+            # FIXED: Override search counts to get more results
+            "SEARCH_COUNT": api_search_count,  # Number of candidates to return
+            "PAGE_LIMIT": str(api_search_count),  # API page limit
+            "SEARCH_OFFSET": 0  # Start from beginning
         })
         
-        print(f"Built search request with {len(any_keyword_tags)} optional and {len(all_keyword_tags)} mandatory keywords")
-        
-        # Print the final request object for debugging
-        print(f"📤 SEARCH REQUEST PAYLOAD: {json.dumps(request_object, indent=2)}")
+        print(f"🔧 API REQUEST CONFIGURED:")
+        print(f"  - SEARCH_COUNT: {request_object['SEARCH_COUNT']}")
+        print(f"  - PAGE_LIMIT: {request_object['PAGE_LIMIT']}")
+        print(f"  - Target candidates: {max_candidates}")
+        print(f"  - Optional keywords: {len(any_keyword_tags)}")
+        print(f"  - Mandatory keywords: {len(all_keyword_tags)}")
         
         return request_object
 

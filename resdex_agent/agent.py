@@ -1,5 +1,3 @@
-# Replace resdex_agent/agent.py with this enhanced version
-
 """
 Enhanced Root ResDex Agent with LLM routing and task breakdown.
 """
@@ -562,4 +560,4 @@ class ResDexRootAgent(BaseAgent):
             }
         }
         
-        return Content(data=health_data)
+        return Content(data=health_data)    

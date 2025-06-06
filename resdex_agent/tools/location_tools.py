@@ -1,5 +1,3 @@
-# Add this to resdex_agent/tools/location_tools.py (new file)
-
 """
 Location analysis tools using Qwen LLM for intelligent location matching.
 """

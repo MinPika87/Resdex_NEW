@@ -100,7 +100,6 @@ class ChatInterface:
             asyncio.run(self._handle_chat_message("help me filter by location"))
     
     async def _handle_chat_message(self, user_input: str):
-        """Handle chat message processing."""
         try:
             # Add user message to history
             self.session_state['chat_history'].append({
@@ -108,20 +107,23 @@ class ChatInterface:
                 "content": user_input
             })
             
+            # Check for "show more candidates" command
+            if self._is_show_more_command(user_input):
+                return await self._handle_show_more_command()
+            
             # Show processing indicator
             with st.spinner("🤖 AI is thinking..."):
-                # CRITICAL FIX: Use new auto-routing system
+                # ENHANCED: Use auto-routing system for other commands
                 session_state_dict = self._get_clean_session_state()
                 
                 print(f"🔍 Prepared clean session state: {list(session_state_dict.keys())}")
                 
-                # ENHANCED: Use auto-routing (no explicit request_type)
+                # Use auto-routing (no explicit request_type)
                 from ...agent import Content
                 
                 content = Content(data={
                     "user_input": user_input,
                     "session_state": session_state_dict
-                    # No request_type - let root agent decide via LLM routing
                 })
                 
                 # Process through enhanced root agent
@@ -131,7 +133,7 @@ class ChatInterface:
                 print(f"🔍 Response type: {result.data.get('type', 'unknown')}")
                 
                 if result.data["success"]:
-                    # CRITICAL FIX: Handle different response types
+                    # Handle different response types
                     response_type = result.data.get("type", "search_interaction")
                     
                     if response_type == "general_query":
@@ -142,17 +144,12 @@ class ChatInterface:
                             "content": ai_message
                         })
                         
-                        # No session state updates for general queries
-                        
                     else:
                         # Handle search interaction responses
-                        # CRITICAL FIX: Only update non-Streamlit session state keys
                         if "session_state" in result.data:
                             updated_state = result.data["session_state"]
                             if isinstance(updated_state, dict):
                                 self._update_session_state_safely(updated_state)
-                            else:
-                                print(f"⚠️ Updated session state is not a dict: {type(updated_state)}")
                         
                         # Add AI response to chat
                         ai_message = result.data.get("message", "Request processed successfully.")
@@ -161,13 +158,12 @@ class ChatInterface:
                             "content": ai_message
                         })
                         
-                        # Handle search trigger - now managed by root agent
+                        # Handle search trigger
                         if result.data.get("trigger_search", False):
                             await self._handle_triggered_search(result.data)
                         
                         # Handle automatic search results (from task breakdown)
                         if "candidates" in result.data.get("session_state", {}):
-                            # Search was already executed by root agent
                             success_msg = "🎯 Search completed with task breakdown!"
                             self.session_state['chat_history'].append({
                                 "role": "assistant", 
@@ -204,6 +200,105 @@ class ChatInterface:
             import traceback
             traceback.print_exc()
             error_msg = f"❌ An error occurred: {str(e)}"
+            self.session_state['chat_history'].append({
+                "role": "assistant",
+                "content": error_msg
+            })
+            st.experimental_rerun()
+
+    def _is_show_more_command(self, user_input: str) -> bool:
+        """Check if user is asking to show more candidates."""
+        show_more_phrases = [
+            "show more candidates", "show more", "display more candidates", 
+            "more candidates", "load more", "see more candidates",
+            "show additional", "display additional", "next batch"
+        ]
+        
+        user_lower = user_input.lower().strip()
+        return any(phrase in user_lower for phrase in show_more_phrases)
+    # Update the show more responses in chat_interface.py
+
+    async def _handle_show_more_command(self):
+        """Handle show more candidates command - FIXED response formatting."""
+        try:
+            all_candidates = self.session_state.get('all_candidates', [])
+            current_display_size = self.session_state.get('display_batch_size', 20)
+            
+            # Calculate new display size (add 20 more)
+            new_display_size = current_display_size + 20
+            
+            # If we have enough candidates already fetched
+            if new_display_size <= len(all_candidates):
+                # Use existing candidates
+                self.session_state['displayed_candidates'] = all_candidates[:new_display_size]
+                self.session_state['candidates'] = all_candidates[:new_display_size]
+                self.session_state['display_batch_size'] = new_display_size
+                self.session_state['page'] = 0  # Reset to first page
+                
+                total_results = self.session_state.get('total_results', 0)
+                # FIXED: Only mention total results, no displayed count
+                ai_response = f"✅ Showing more candidates! You now have access to additional profiles from {total_results:,} total matches. Use pagination to browse through them."
+                
+            else:
+                # Need to fetch more candidates from API
+                await self._fetch_more_candidates_from_api()
+                return  # _fetch_more_candidates_from_api handles the response
+            
+            self.session_state['chat_history'].append({
+                "role": "assistant",
+                "content": ai_response
+            })
+            
+            st.experimental_rerun()
+            
+        except Exception as e:
+            error_msg = f"❌ Error showing more candidates: {str(e)}"
+            self.session_state['chat_history'].append({
+                "role": "assistant",
+                "content": error_msg
+            })
+            st.experimental_rerun()
+
+    async def _fetch_more_candidates_from_api(self):
+        """Fetch additional candidates from API when local pool is exhausted - FIXED response."""
+        try:
+            with st.spinner("🔍 Fetching more candidates from API..."):
+                # ... existing fetch logic ...
+                
+                if result.data["success"] and result.data["candidates"]:
+                    new_candidates = result.data["candidates"]
+                    
+                    # Merge with existing candidates
+                    updated_all_candidates = all_candidates + new_candidates
+                    self.session_state['all_candidates'] = updated_all_candidates
+                    
+                    # Update display to show 20 more
+                    current_display_size = self.session_state.get('display_batch_size', 20)
+                    new_display_size = current_display_size + 20
+                    
+                    self.session_state['displayed_candidates'] = updated_all_candidates[:new_display_size]
+                    self.session_state['candidates'] = updated_all_candidates[:new_display_size]
+                    self.session_state['display_batch_size'] = new_display_size
+                    self.session_state['page'] = 0
+                    
+                    # FIXED: Success message mentions only total results
+                    total_results = self.session_state.get('total_results', 0)
+                    ai_response = f"✅ Fetched additional candidates from the database! You now have access to more profiles from {total_results:,} total matches."
+                    
+                else:
+                    # FIXED: No more candidates message mentions only total results
+                    total_results = self.session_state.get('total_results', 0)
+                    ai_response = f"ℹ️ No additional candidates available at this time from {total_results:,} total matches. Try refining your search criteria for different results."
+                
+                self.session_state['chat_history'].append({
+                    "role": "assistant",
+                    "content": ai_response
+                })
+                
+                st.experimental_rerun()
+                
+        except Exception as e:
+            error_msg = f"❌ Error fetching more candidates: {str(e)}"
             self.session_state['chat_history'].append({
                 "role": "assistant",
                 "content": error_msg

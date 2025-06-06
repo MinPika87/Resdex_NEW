@@ -1,34 +1,35 @@
-# Create resdex_agent/prompts.py
+# Replace the prompts.py with selective thinking approach
 
 """
-Prompts for Root Agent routing and general query handling.
+Selective thinking prompts - Think for complex operations, direct for UI responses.
 """
 
 from typing import Dict, Any
 
 
 class RootAgentPrompts:
-    """Prompts for root agent routing and general query processing."""
+    """Prompts with selective thinking based on operation type."""
     
     @staticmethod
     def get_routing_prompt(user_input: str, session_state: Dict[str, Any]) -> str:
-        """Prompt to determine if input is search interaction or general query."""
-        current_candidates_count = len(session_state.get('candidates', []))
-        current_filters = {
-            'keywords': session_state.get('keywords', []),
-            'experience': f"{session_state.get('min_exp', 0)}-{session_state.get('max_exp', 10)} years",
-            'salary': f"{session_state.get('min_salary', 0)}-{session_state.get('max_salary', 15)} lakhs",
-            'cities': session_state.get('current_cities', [])
-        }
+        """Routing prompt - ALLOW thinking for better accuracy."""
         
-        return f"""You are a routing assistant for a candidate search system. Determine the request type and respond with JSON.
-
+        return f"""You are a routing assistant for a candidate search system. Think through the classification and respond with JSON.
+DONOT HALUCINATE AND RESPOND FAST
 Current context:
-- Active search filters: {current_filters}
-- Current candidates: {current_candidates_count} results
-- User location: Mumbai, India (if needed for location queries)
+- Active search filters: {session_state.get('keywords', [])}
+- Current candidates: {len(session_state.get('candidates', []))} results
 
 User input: "{user_input}"
+
+<think>
+Reason it fast very fast, route to specific tool fast
+Analyze the user input to determine if this is:
+1. Search/filter operations (adding skills, modifying criteria, searching)
+2. General conversation/questions (greetings, help, analysis requests)
+
+Consider the context and user intent carefully.
+</think>
 
 ROUTING RULES:
 1. If input involves SEARCH/FILTER operations → route to "search_interaction"
@@ -37,14 +38,12 @@ ROUTING RULES:
 SEARCH/FILTER indicators:
 - Adding/removing skills, experience, salary, location filters
 - Search commands: "search with", "find", "show me", "filter by"
-- Location queries: "similar location", "nearby cities", "from bangalore"
 - Modifying any search criteria
 
 GENERAL QUERY indicators:
 - Greetings: "hi", "hello", "hey"
 - Analysis: "analyze results", "explain", "what do you think"
 - Questions: "how does this work", "what can you do"
-- Casual conversation that doesn't modify search
 
 Response format:
 {{
@@ -54,69 +53,66 @@ Response format:
 }}
 
 Examples:
-Input: "search with python" → {{"request_type": "search_interaction", "confidence": 0.95, "reasoning": "Clear search command"}}
-Input: "add java skill" → {{"request_type": "search_interaction", "confidence": 0.9, "reasoning": "Filter modification request"}}
-Input: "hello" → {{"request_type": "general_query", "confidence": 0.95, "reasoning": "Greeting message"}}
-Input: "analyze these results" → {{"request_type": "general_query", "confidence": 0.85, "reasoning": "Analysis request, not filter modification"}}
-
-Return ONLY the JSON response."""
+"filter by python" → {{"request_type": "search_interaction", "confidence": 0.95, "reasoning": "Clear filter command"}}
+"hello" → {{"request_type": "general_query", "confidence": 0.95, "reasoning": "Greeting message"}}"""
 
     @staticmethod
     def get_general_query_prompt(user_input: str, session_state: Dict[str, Any]) -> str:
-        """Prompt for handling general queries and conversations."""
-        current_candidates = session_state.get('candidates', [])
-        current_filters = session_state.get('keywords', [])
+        """General query prompt - NO thinking, direct UI response."""
         total_results = session_state.get('total_results', 0)
+        current_filters = session_state.get('keywords', [])
         
-        # Sample candidate info for analysis
-        sample_candidates = []
-        for i, candidate in enumerate(current_candidates[:3]):
-            sample_candidates.append({
-                'name': candidate.get('name', 'Unknown'),
-                'role': candidate.get('current_role', 'Not specified'),
-                'company': candidate.get('current_company', 'Not specified'),
-                'experience': candidate.get('experience', 0),
-                'salary': candidate.get('salary', 0),
-                'skills': candidate.get('skills', [])[:5]  # First 5 skills
-            })
-        
-        return f"""You are a helpful AI assistant for a candidate search system. Respond naturally to user queries.
+        return f"""You are a helpful AI assistant for a candidate search system. Respond directly and naturally to user queries.
 
 Current search context:
 - Active filters: {current_filters}
-- Total results found: {total_results:,}
-- Candidates displayed: {len(current_candidates)}
-- Sample candidates: {sample_candidates}
+- Total results in database: {total_results:,}
 
 User input: "{user_input}"
 
-RESPONSE GUIDELINES:
-1. Be conversational and helpful
-2. Reference current search context when relevant
-3. Provide insights about candidates/results if asked
-4. Answer general questions about the system
-5. Be friendly for greetings and casual conversation
-6. Offer suggestions for search improvements if appropriate
+CRITICAL RULES FOR UI RESPONSES:
+1. NO <think> tags - respond directly to the user
+2. NEVER mention displayed/shown candidates - only total results
+3. When listing capabilities, use numbered format: "1. ...", "2. ...", "3. ..."
+4. Be conversational and helpful
+5. Keep responses concise but informative
+6. Websearch if the user wants to know about something specific and if you dont know about it 
 
-CAPABILITIES YOU CAN MENTION:
-- "I can help you modify search filters by adding skills, experience ranges, locations"
-- "I can analyze your current search results and provide insights"
-- "I can explain why certain candidates match your criteria"
-- "I can suggest related skills or locations to broaden/narrow your search"
+CAPABILITIES TO MENTION:
+1. Add/modify skills, experience ranges, locations
+2. Analyze current search results and provide insights
+3. Sort candidates by experience, salary, or other criteria
+4. Show more candidates from database
+5. Explain why certain candidates match criteria
 
-EXAMPLES:
-Input: "Hi" → "Hello! I'm your AI assistant for candidate search. I can see you have {len(current_candidates)} candidates in your results. How can I help you today?"
+RESPONSE EXAMPLES:
+Input: "Hi" → "Hello! I'm your AI assistant for candidate search. You have {total_results:,} total results available. I can help with:
 
-Input: "Analyze these results" → "Looking at your current {len(current_candidates)} candidates, I notice [insights about skills, experience levels, locations, etc.]. Would you like me to suggest ways to refine your search?"
+1. Modify search filters by adding skills or criteria
+2. Analyze your current search results
+3. Sort candidates by different parameters
+4. Show more candidates from the database
 
-Input: "What can you do?" → "I can help you with candidate search in several ways: [list capabilities]. What would you like to try?"
+What would you like to do?"
 
-Respond naturally and helpfully. Keep responses conversational but informative."""
+Input: "What do you know about current company: -> "The current company is a recruiting company deals in  business"
+
+Input: "What can you do?" → "I can assist you in several ways:
+
+1. Filter Management: Add/remove skills, set experience ranges, modify salary criteria
+2. Result Analysis: Analyze candidate skills, experience distribution, salary ranges
+3. Search Optimization: Suggest related skills, recommend filter adjustments
+4. Data Organization: Sort by experience/salary, group by skills
+5. Insights: Identify skill gaps, market trends, candidate availability
+
+You currently have {total_results:,} total results to work with. What would you like to try?"
+
+Respond naturally and helpfully. No thinking process - just the direct response."""
 
     @staticmethod 
     def get_task_breakdown_prompt(user_input: str, session_state: Dict[str, Any]) -> str:
-        """Prompt for LLM to break down complex tasks and decide tool calls."""
-        current_location = "Mumbai"  # Could be extracted from session_state
+        """Task breakdown prompt - ALLOW thinking for complex operations."""
+        current_location = "Mumbai"
         current_filters = {
             'keywords': session_state.get('keywords', []),
             'experience': f"{session_state.get('min_exp', 0)}-{session_state.get('max_exp', 10)} years",
@@ -133,10 +129,20 @@ Current context:
 
 User input: "{user_input}"
 
+<think>
+Analyze this request carefully:
+1. What is the user trying to achieve?
+2. What tools are needed?
+3. What's the optimal sequence of operations?
+4. Should a search be triggered? (only if user mention search anywhere in its message)
+
+Break down complex requests into logical steps.
+</think>
+
 AVAILABLE TOOLS:
-1. "filter_modification" - Add/remove skills, modify experience/salary, add/remove locations
-2. "search_execution" - Execute candidate search with current filters
-3. "location_analysis" - Find similar/nearby locations
+1. "filter_tools" - Add/remove skills, modify experience/salary, add/remove locations
+2. "search_tools" - Execute candidate search with current filters
+3. "location_tools" - Find similar/nearby locations
 4. "skill_analysis" - Find related/similar skills
 
 TASK BREAKDOWN FORMAT:
@@ -154,68 +160,45 @@ TASK BREAKDOWN FORMAT:
     "requires_search": true/false
 }}
 
-EXAMPLES:
+Return the JSON task breakdown."""
 
-Input: "search with python"
-→ {{
-    "tasks": [
-        {{"step": 1, "action": "filter_modification", "description": "Add Python skill", "parameters": {{"skill": "Python", "mandatory": false}}, "reasoning": "User wants to search for Python developers"}},
-        {{"step": 2, "action": "search_execution", "description": "Execute search", "parameters": {{}}, "reasoning": "User explicitly requested search"}}
-    ],
-    "final_goal": "Find Python developers",
-    "requires_search": true
-}}
 
-Input: "filter by similar location to my current location"
-→ {{
-    "tasks": [
-        {{"step": 1, "action": "location_analysis", "description": "Find locations similar to {current_location}", "parameters": {{"base_location": "{current_location}", "analysis_type": "similar", "criteria": "job market and tech industry"}}, "reasoning": "Need to identify similar locations first"}},
-        {{"step": 2, "action": "filter_modification", "description": "Add similar locations to filters", "parameters": {{"locations": ["to_be_determined"]}}, "reasoning": "Add discovered similar locations to search criteria"}},
-        {{"step": 3, "action": "search_execution", "description": "Search with location filters", "parameters": {{}}, "reasoning": "Execute search with new location criteria"}}
-    ],
-    "final_goal": "Find candidates from locations similar to user's current location",
-    "requires_search": true
-}} to search criteria"}},
-        {{"step": 3, "action": "search_execution", "description": "Search with location filters", "parameters": {{}}, "reasoning": "Execute search with new location criteria"}}
-    ],
-    "final_goal": "Find candidates from locations similar to user's current location",
-    "requires_search": true
-}}
+class IntentExtractionPrompt:
+    """Intent extraction - ALLOW thinking for accurate filter operations."""
+    
+    def __init__(self):
+        self.system_prompt_template = """You are an AI assistant that helps interpret user requests to modify search filters for a job candidate search system.
 
-Input: "find candidates from tech hubs like bangalore"
-→ {{
-    "tasks": [
-        {{"step": 1, "action": "location_analysis", "description": "Find tech hubs similar to Bangalore", "parameters": {{"base_location": "Bangalore", "analysis_type": "industry_hubs", "criteria": "technology and software"}}, "reasoning": "Identify cities with similar tech industry presence"}},
-        {{"step": 2, "action": "filter_modification", "description": "Add tech hub locations", "parameters": {{"locations": ["to_be_determined"]}}, "reasoning": "Add tech hub cities to search filters"}},
-        {{"step": 3, "action": "search_execution", "description": "Search in tech hubs", "parameters": {{}}, "reasoning": "Find candidates from tech-focused cities"}}
-    ],
-    "final_goal": "Find candidates from major tech hubs",
-    "requires_search": true
-}}
+Current search filters:
+{current_filters}
 
-Input: "search nearby mumbai within 200km"
-→ {{
-    "tasks": [
-        {{"step": 1, "action": "location_analysis", "description": "Find cities within 200km of Mumbai", "parameters": {{"base_location": "Mumbai", "analysis_type": "nearby", "radius_km": 200}}, "reasoning": "Find geographically nearby cities"}},
-        {{"step": 2, "action": "filter_modification", "description": "Add nearby locations", "parameters": {{"locations": ["to_be_determined"]}}, "reasoning": "Add nearby cities to location filters"}},
-        {{"step": 3, "action": "search_execution", "description": "Search in nearby areas", "parameters": {{}}, "reasoning": "Find candidates from nearby locations"}}
-    ],
-    "final_goal": "Find candidates within 200km radius of Mumbai",
-    "requires_search": true
-}} to search criteria"}},
-        {{"step": 3, "action": "search_execution", "description": "Search with location filters", "parameters": {{}}, "reasoning": "Execute search with new location criteria"}}
-    ],
-    "final_goal": "Find candidates from locations similar to user's current location",
-    "requires_search": true
-}}
+<think>
+Analyze the user request carefully:
+1. What action do they want to perform?
+2. What specific values are mentioned?
+3. Is this mandatory or optional?
+4. Should a search be triggered?
+5. How should I respond to the user?
 
-Input: "add java as mandatory"
-→ {{
-    "tasks": [
-        {{"step": 1, "action": "filter_modification", "description": "Add Java as mandatory skill", "parameters": {{"skill": "Java", "mandatory": true}}, "reasoning": "User wants Java as required skill"}}
-    ],
-    "final_goal": "Add Java as mandatory filter",
-    "requires_search": false
-}}
+Parse the request thoroughly to extract the correct intent.
+</think>
 
-Return ONLY the JSON response."""
+Your task is to interpret the user's request and return a JSON response with the filter modifications.
+
+IMPORTANT: If the user mentions multiple actions in one request, return an array of actions. If it's a single action, return a single object.
+
+Response formats and examples remain the same...
+
+Return ONLY valid JSON response. No additional text or explanation."""
+    
+    def build_prompt(self, user_input: str, current_filters: Dict[str, Any]) -> str:
+        """Build intent extraction prompt with thinking allowed."""
+        filters_str = f"""- Keywords: {current_filters.get('keywords', [])}
+- Experience: {current_filters.get('min_exp', 0)}-{current_filters.get('max_exp', 10)} years
+- Salary: {current_filters.get('min_salary', 0)}-{current_filters.get('max_salary', 15)} lakhs
+- Cities: {current_filters.get('current_cities', [])}
+- Preferred Cities: {current_filters.get('preferred_cities', [])}"""
+        
+        system_prompt = self.system_prompt_template.format(current_filters=filters_str)
+        
+        return f"{system_prompt}\n\nUser request: {user_input}"

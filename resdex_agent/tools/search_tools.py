@@ -1,5 +1,3 @@
-# Replace resdex_agent/tools/search_tools.py with this fixed version
-
 """
 Search-related tools for ResDex Agent.
 """
@@ -32,15 +30,26 @@ class SearchTool(Tool):
         self.api_client = api_client
         self.db_manager = db_manager
         self.data_processor = DataProcessor()
-    
+    # Update the search_tools.py to ensure we get at least 20 candidates
+
     async def __call__(self, search_filters: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute candidate search."""
+        """Execute candidate search - FIXED to ensure minimum 20 candidates."""
         try:
             logger.info(f"Executing search with filters: {search_filters}")
             print(f"🔍 SEARCH TOOL DEBUG: Starting search with filters: {search_filters}")
             
+            # FIXED: Ensure we request enough candidates from API
+            max_candidates = search_filters.get('max_candidates', 100)
+            print(f"📊 REQUESTING: {max_candidates} candidates from API")
+            
             # Build search request using the API client
             request_payload = self.api_client.build_search_request(search_filters)
+            
+            # FIXED: Override the API request to fetch more candidates
+            # Increase the search count in the API request
+            if 'SEARCH_COUNT' in request_payload:
+                request_payload['SEARCH_COUNT'] = max(200, max_candidates * 2)  # Request 2x to ensure we get enough
+                print(f"🔧 OVERRIDING API SEARCH_COUNT to: {request_payload['SEARCH_COUNT']}")
             
             # Execute search
             search_response = await self.api_client.search_candidates(request_payload)
@@ -80,12 +89,15 @@ class SearchTool(Tool):
                     "message": "No candidates found matching the criteria"
                 }
             
-            # Limit to first 20 for detailed processing
-            user_ids = user_ids[:20]
-            print(f"🔍 Processing first {len(user_ids)} user IDs for detailed profiles")
+            # FIXED: Ensure we take enough user IDs for processing
+            # Take up to max_candidates, but at least 20 if available
+            target_candidates = max(20, min(max_candidates, len(user_ids)))
+            user_ids_to_process = user_ids[:target_candidates]
+            
+            print(f"🎯 PROCESSING: {len(user_ids_to_process)} user IDs (target: {target_candidates})")
             
             # Get detailed user information
-            user_details = await self.api_client.get_user_details(user_ids)
+            user_details = await self.api_client.get_user_details(user_ids_to_process)
             
             if not user_details:
                 return {
@@ -95,8 +107,10 @@ class SearchTool(Tool):
                     "message": f"Found {total_count:,} matches but failed to fetch candidate details"
                 }
             
+            print(f"📋 USER DETAILS RECEIVED: {len(user_details)} candidates")
+            
             # Get real names from database
-            real_names = await self.db_manager.get_real_names(user_ids)
+            real_names = await self.db_manager.get_real_names(user_ids_to_process)
             
             # Format candidate data
             candidates = []
@@ -111,7 +125,11 @@ class SearchTool(Tool):
                 if candidate:
                     candidates.append(candidate)
             
-            print(f"Search completed: {len(candidates) > 0}, candidates: {len(candidates)}")
+            print(f"✅ FINAL CANDIDATES: {len(candidates)} successfully formatted")
+            
+            # FIXED: If we have fewer than 20 candidates but API has more results, warn
+            if len(candidates) < 20 and total_count > 100:
+                print(f"⚠️ WARNING: Only got {len(candidates)} candidates but {total_count:,} total exist")
             
             return {
                 "success": True,
