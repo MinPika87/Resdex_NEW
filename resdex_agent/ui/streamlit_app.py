@@ -1,4 +1,3 @@
-# resdex_agent/ui/streamlit_app.py - FIXED for LIVE step streaming during search
 """
 Streamlit application for ResDex Agent - FIXED for live step streaming
 """
@@ -21,10 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 class StreamlitApp:
-    """
-    FIXED Streamlit application with LIVE step streaming for all operations.
-    """
-    
     def __init__(self):
         self.config = AgentConfig.from_env()
         self.root_agent = ResDexRootAgent(self.config)
@@ -38,7 +33,6 @@ class StreamlitApp:
         logger.info("FIXED Streamlit app initialized with ResDex Agent")
     
     def run(self):
-        """Main application entry point."""
         # Page configuration
         st.set_page_config(
             page_title="ResDex AI Agent",
@@ -95,8 +89,7 @@ class StreamlitApp:
         self.chat_interface = ChatInterface(st.session_state, self.root_agent)
     
     def _render_header(self):
-            """FIXED: Render application header with simple agent status."""
-            st.title("🔍 ResDex AI Agent - Enhanced")
+            st.title("🔍 ResDex AI Agent")
             st.markdown("*Real-time AI processing with step-by-step insights*")
             
             # Simple agent status indicator
@@ -111,7 +104,6 @@ class StreamlitApp:
                         st.json(health_status)
     
     def _render_main_content(self):
-        """Render main content area."""
         # Search form
         with st.container():
             st.markdown("### Search Configuration")

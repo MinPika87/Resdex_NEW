@@ -1,4 +1,3 @@
-# resdex_agent/ui/components/chat_interface.py - FIXED for LIVE step streaming
 """
 Chat interface component - FIXED to show LIVE streaming steps
 """
@@ -110,7 +109,6 @@ class ChatInterface:
                 user_input, session_id, step_container
             ))
             
-            # ALWAYS keep the step display visible with final status using clean layout
             final_steps = step_logger.get_steps(session_id)
             if final_steps:
                 # Use clean Streamlit layout with proper boundaries
@@ -128,18 +126,15 @@ class ChatInterface:
                     with col2:
                         st.markdown('<span style="background: #6c757d; color: white; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">DONE</span>', unsafe_allow_html=True)
                     
-                    # Show all steps with clean layout that fits within boundaries
                     for step in final_steps:
                         icon = self.step_display.step_icons.get(step["type"], "💡")
                         
-                        # Adjusted columns: smaller icon, larger message area, smaller timestamp
                         step_col1, step_col2, step_col3 = st.columns([0.5, 6, 1.5])
                         
                         with step_col1:
                             st.markdown(f"<div style='text-align: center; font-size: 14px;'>{icon}</div>", unsafe_allow_html=True)
                         
                         with step_col2:
-                            # Add word wrap and limit text length to prevent overflow
                             message = step['message']
                             if len(message) > 45:
                                 message = message[:42] + "..."
@@ -153,7 +148,6 @@ class ChatInterface:
                     # Summary
                     st.caption(f"📊 {len(final_steps)} processing steps")
             
-            # Trigger rerun to show new messages
             st.experimental_rerun()
                 
         except Exception as e:
@@ -163,7 +157,6 @@ class ChatInterface:
     async def _handle_chat_message_with_step_streaming(self, user_input: str, session_id: str, step_container) -> bool:
         """FIXED: Handle chat message with ALL steps accumulating in real-time."""
         try:
-            # Function to update ALL accumulated steps using clean Streamlit layout
             def update_all_steps():
                 """Update steps display with ALL accumulated steps using clean formatting"""
                 current_steps = step_logger.get_steps(session_id)
@@ -476,7 +469,6 @@ class ChatInterface:
                 session_id = str(uuid.uuid4())
                 self._process_message_with_live_steps("help me filter by location", session_id)
     
-    # [Keep all other methods unchanged - _is_search_related, _handle_show_more_command, etc.]
     def _is_search_related(self, user_input: str) -> bool:
         """Determine if input is search-related."""
         search_keywords = [

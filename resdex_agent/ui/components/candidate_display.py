@@ -1,5 +1,3 @@
-# Replace resdx_agent/ui/components/candidate_display.py with this cleaned version
-
 """
 Candidate display component for ResDex Agent UI - Cleaned version without unwanted elements
 """
@@ -15,11 +13,8 @@ class CandidateDisplay:
         self.session_state = session_state
         self.page_size = 5
     
-    # Update the candidate_display.py render_results method
-
     def render_results(self):
         """Render the complete results section - FIXED for batch display system."""
-        # Use displayed_candidates instead of all candidates
         candidates = self.session_state.get('displayed_candidates', [])
         total_results = self.session_state.get('total_results', 0)
         all_candidates_count = len(self.session_state.get('all_candidates', []))
@@ -97,7 +92,6 @@ class CandidateDisplay:
         </div>
         """, unsafe_allow_html=True)
         
-        # REMOVED: Save Search button
     
     def _render_candidate_card(self, candidate: Dict[str, Any], index: int):
         """Render a single candidate card (CLEANED VERSION)."""
@@ -113,18 +107,11 @@ class CandidateDisplay:
                 </div>
             """, unsafe_allow_html=True)
             
-            # Professional details (REMOVED previous company/role)
             self._render_professional_details(candidate)
             
-            # Skills section
             self._render_skills_section(candidate)
             
-            # Preferred locations
             self._render_preferred_locations(candidate)
-            
-            # REMOVED: Action buttons (View Phone, Call Candidate, Send Email)
-            
-            # REMOVED: Footer stats (views, applications, etc.)
             
             st.markdown("</div>", unsafe_allow_html=True)
     
@@ -132,11 +119,9 @@ class CandidateDisplay:
         """Render professional experience details (REMOVED previous role)."""
         current_role = candidate.get('current_role', 'Not specified')
         current_company = candidate.get('current_company', 'Not specified')
-        # REMOVED: previous_role and previous_company
         education = candidate.get('education_display', 'Not specified')
         experience = candidate.get('experience', 0)
         
-        # Highlight ML/AI related roles
         ml_keywords = ["Machine Learning", "Data Science", "AI", "Analytics", "ML Engineer"]
         should_highlight = any(keyword.lower() in current_role.lower() for keyword in ml_keywords)
         
@@ -154,7 +139,6 @@ class CandidateDisplay:
         </div>
         """, unsafe_allow_html=True)
         
-        # REMOVED: Previous role section
     
     def _render_skills_section(self, candidate: Dict[str, Any]):
         """Render candidate skills with highlighting."""
@@ -162,7 +146,6 @@ class CandidateDisplay:
         may_also_know = candidate.get('may_also_know', [])
         selected_keywords = self.session_state.get('selected_keywords', [])
         
-        # Clean selected keywords for comparison
         search_keywords = [kw.replace('★ ', '').lower() for kw in selected_keywords]
         
         if skills:

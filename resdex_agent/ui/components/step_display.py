@@ -1,4 +1,3 @@
-# resdex_agent/ui/components/step_display.py - FIXED for LIVE step streaming
 """
 Real-time step display component - Fixed for live streaming in Streamlit 1.12
 """
@@ -196,7 +195,6 @@ class StepDisplay:
                 placeholder.markdown("🔄 **Processing...**")
 
 
-# FIXED: Simplified step polling for real-time updates
 def poll_and_update_steps(session_id: str, placeholder, max_polls: int = 50):
     """
     FIXED: Poll for steps and update display - works with Streamlit 1.12
