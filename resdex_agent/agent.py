@@ -1,9 +1,13 @@
+# resdex_agent/agent.py - ENHANCED with step logging
 """
-Enhanced Root ResDex Agent with LLM routing and task breakdown.
+Enhanced Root ResDex Agent with LLM routing, task breakdown, and step logging.
 """
 
 from typing import Dict, Any, List, Optional
 import logging
+
+# NEW IMPORT for step logging
+from .utils.step_logger import step_logger
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +34,7 @@ class BaseAgent:
 
 class ResDexRootAgent(BaseAgent):
     """
-    Enhanced Root agent with LLM routing and task breakdown capabilities.
+    Enhanced Root agent with LLM routing, task breakdown, and step logging capabilities.
     """
 
     def __init__(self, config=None):
@@ -59,7 +63,7 @@ class ResDexRootAgent(BaseAgent):
         self.sub_agents = {}
         self._initialize_sub_agents()
 
-        logger.info(f"Enhanced {self._config.name} v{self._config.version} with LLM routing")
+        logger.info(f"Enhanced {self._config.name} v{self._config.version} with LLM routing and step logging")
 
     @property
     def config(self):
@@ -79,23 +83,28 @@ class ResDexRootAgent(BaseAgent):
         logger.info(f"Initialized {len(self.sub_agents)} sub-agents")
     
     async def execute(self, content: Content) -> Content:
-        """Enhanced execute with LLM routing and task breakdown."""
+        """ENHANCED execute with LLM routing, task breakdown, and step logging."""
         try:
+            # NEW: Extract session ID for step logging
+            session_id = content.data.get('session_id')
+            
             # Check if this is a direct API call (has explicit request_type)
             if "request_type" in content.data and content.data["request_type"] != "auto_route":
-                return await self._handle_direct_request(content)
+                return await self._handle_direct_request_with_logging(content, session_id)
             
-            # NEW: LLM-driven routing for user inputs
+            # NEW: Enhanced LLM-driven routing for user inputs with step logging
             user_input = content.data.get("user_input", "")
             session_state = content.data.get("session_state", {})
             
             if user_input:
-                return await self._handle_intelligent_routing(user_input, session_state)
+                return await self._handle_intelligent_routing_with_logging(user_input, session_state, session_id)
             
             # Fallback to search interaction
             return await self._handle_search_interaction(content)
                 
         except Exception as e:
+            if session_id:
+                step_logger.log_error(f"Root agent execution failed: {str(e)}")
             logger.error(f"Enhanced root agent execution failed: {e}")
             import traceback
             traceback.print_exc()
@@ -105,31 +114,41 @@ class ResDexRootAgent(BaseAgent):
                 "details": str(e)
             })
     
-    async def _handle_direct_request(self, content: Content) -> Content:
-        """Handle direct API requests (original functionality)."""
+    # NEW METHOD: Handle direct requests with step logging
+    async def _handle_direct_request_with_logging(self, content: Content, session_id: str = None) -> Content:
+        """Handle direct API requests with step logging."""
         request_type = content.data.get("request_type")
         
-        logger.info(f"Root agent processing direct request type: {request_type}")
+        if session_id:
+            step_logger.log_step(f"🎯 Direct request: {request_type}", "system")
+        
+        logger.info(f"Enhanced root agent processing direct request type: {request_type}")
         
         if request_type == "search_interaction":
             return await self._handle_search_interaction(content)
         elif request_type == "candidate_search":
-            return await self._handle_candidate_search(content)
+            return await self._handle_candidate_search_with_logging(content, session_id)
         elif request_type == "health_check":
             return await self._handle_health_check(content)
         else:
+            if session_id:
+                step_logger.log_error(f"Unknown request type: {request_type}")
             return Content(data={
                 "success": False,
                 "error": f"Unknown request type: {request_type}",
                 "supported_types": ["search_interaction", "candidate_search", "health_check"]
             })
-    
-    async def _handle_intelligent_routing(self, user_input: str, session_state: Dict[str, Any]) -> Content:
-        """NEW: Intelligent LLM-driven routing and task breakdown."""
-        print(f"🧠 ROOT AGENT: Intelligent routing for '{user_input}'")
+
+    # NEW METHOD: Enhanced intelligent routing with step logging
+    async def _handle_intelligent_routing_with_logging(self, user_input: str, session_state: Dict[str, Any], session_id: str = None) -> Content:
+        """Enhanced intelligent routing with step logging."""
+        if session_id:
+            step_logger.log_step(f"🧠 Analyzing input complexity", "routing")
+        
+        print(f"🧠 ENHANCED ROOT AGENT: Intelligent routing for '{user_input}'")
         
         # Step 1: Route the request using LLM
-        routing_result = await self._route_request(user_input, session_state)
+        routing_result = await self._route_request_with_logging(user_input, session_state, session_id)
         
         if not routing_result["success"]:
             return Content(data=routing_result)
@@ -137,25 +156,34 @@ class ResDexRootAgent(BaseAgent):
         request_type = routing_result["request_type"]
         confidence = routing_result.get("confidence", 0.0)
         
-        print(f"🎯 ROUTING DECISION: {request_type} (confidence: {confidence:.2f})")
+        if session_id:
+            step_logger.log_step(f"✅ Route determined: {request_type}", "decision")
+        
+        print(f"🎯 ENHANCED ROUTING DECISION: {request_type} (confidence: {confidence:.2f})")
         
         if request_type == "search_interaction":
             # Step 2: Task breakdown for complex search operations
-            return await self._handle_search_with_task_breakdown(user_input, session_state)
+            return await self._handle_search_with_task_breakdown_logged(user_input, session_state, session_id)
         
         elif request_type == "general_query":
             # Step 3: Handle general queries with LLM
-            return await self._handle_general_query(user_input, session_state)
+            return await self._handle_general_query_with_logging(user_input, session_state, session_id)
         
         else:
+            if session_id:
+                step_logger.log_error(f"Unknown routed request type: {request_type}")
             return Content(data={
                 "success": False,
                 "error": f"Unknown routed request type: {request_type}"
             })
     
-    async def _route_request(self, user_input: str, session_state: Dict[str, Any]) -> Dict[str, Any]:
-        """Use LLM to route the request."""
+    # NEW METHOD: LLM routing with step logging
+    async def _route_request_with_logging(self, user_input: str, session_state: Dict[str, Any], session_id: str = None) -> Dict[str, Any]:
+        """Use LLM to route the request with step logging."""
         try:
+            if session_id:
+                step_logger.log_step("🤖 Consulting routing LLM", "llm")
+            
             from .prompts import RootAgentPrompts
             
             routing_prompt = RootAgentPrompts.get_routing_prompt(user_input, session_state)
@@ -168,6 +196,8 @@ class ResDexRootAgent(BaseAgent):
             
             if llm_result["success"]:
                 routing_data = llm_result["parsed_response"]
+                if session_id:
+                    step_logger.log_step(f"📋 Routing analysis complete", "decision")
                 return {
                     "success": True,
                     "request_type": routing_data.get("request_type", "general_query"),
@@ -175,36 +205,33 @@ class ResDexRootAgent(BaseAgent):
                     "reasoning": routing_data.get("reasoning", "")
                 }
             else:
+                if session_id:
+                    step_logger.log_step("⚠️ LLM routing failed, using fallback", "decision")
                 # Fallback to simple keyword detection
                 return self._fallback_routing(user_input)
                 
         except Exception as e:
+            if session_id:
+                step_logger.log_error(f"LLM routing failed: {str(e)}")
             logger.error(f"LLM routing failed: {e}")
             return self._fallback_routing(user_input)
     
-    def _fallback_routing(self, user_input: str) -> Dict[str, Any]:
-        """Fallback routing using keyword detection."""
-        search_keywords = ["search", "find", "add", "remove", "filter", "set", "modify", "candidates"]
-        general_keywords = ["hi", "hello", "analyze", "explain", "what", "how", "help"]
-        
-        input_lower = user_input.lower()
-        
-        if any(keyword in input_lower for keyword in search_keywords):
-            return {"success": True, "request_type": "search_interaction", "confidence": 0.7}
-        elif any(keyword in input_lower for keyword in general_keywords):
-            return {"success": True, "request_type": "general_query", "confidence": 0.7}
-        else:
-            return {"success": True, "request_type": "general_query", "confidence": 0.5}
-    
-    async def _handle_search_with_task_breakdown(self, user_input: str, session_state: Dict[str, Any]) -> Content:
-        """NEW: Handle search requests with LLM task breakdown."""
+    # NEW METHOD: Search with task breakdown and logging
+    async def _handle_search_with_task_breakdown_logged(self, user_input: str, session_state: Dict[str, Any], session_id: str = None) -> Content:
+        """Handle search requests with LLM task breakdown and logging."""
         try:
+            if session_id:
+                step_logger.log_step("🔧 Activating Search Interaction Agent", "tool")
+            
             from .prompts import RootAgentPrompts
             
             # Step 1: Get task breakdown from LLM
             task_prompt = RootAgentPrompts.get_task_breakdown_prompt(user_input, session_state)
             
-            print(f"🧠 TASK BREAKDOWN: Analyzing '{user_input}'")
+            if session_id:
+                step_logger.log_step("📋 Creating task execution plan", "llm")
+            
+            print(f"🧠 ENHANCED TASK BREAKDOWN: Analyzing '{user_input}'")
             
             llm_result = await self.tools["root_llm_tool"]._call_llm_direct(
                 prompt=task_prompt,
@@ -213,55 +240,84 @@ class ResDexRootAgent(BaseAgent):
             
             if llm_result["success"]:
                 task_plan = llm_result["parsed_response"]
-                print(f"📋 TASK PLAN: {task_plan.get('final_goal', 'Unknown goal')}")
+                if session_id:
+                    step_logger.log_step(f"✅ Plan created: {len(task_plan.get('tasks', []))} steps", "system")
+                
+                print(f"📋 ENHANCED TASK PLAN: {task_plan.get('final_goal', 'Unknown goal')}")
                 
                 # Step 2: Execute the task plan
-                return await self._execute_task_plan(task_plan, user_input, session_state)
+                return await self._execute_task_plan_with_logging(task_plan, user_input, session_state, session_id)
             else:
+                if session_id:
+                    step_logger.log_step("⚠️ Task breakdown failed, using simple processing", "decision")
                 # Fallback to original search interaction
-                print("⚠️ Task breakdown failed, using fallback")
+                print("⚠️ Enhanced task breakdown failed, using fallback")
                 return await self._fallback_to_search_interaction(user_input, session_state)
                 
         except Exception as e:
-            logger.error(f"Task breakdown failed: {e}")
+            if session_id:
+                step_logger.log_error(f"Task breakdown failed: {str(e)}")
+            logger.error(f"Enhanced task breakdown failed: {e}")
             return await self._fallback_to_search_interaction(user_input, session_state)
     
-    async def _execute_task_plan(self, task_plan: Dict[str, Any], user_input: str, session_state: Dict[str, Any]) -> Content:
-        """Execute the LLM-generated task plan."""
+    # NEW METHOD: Execute task plan with logging
+    async def _execute_task_plan_with_logging(self, task_plan: Dict[str, Any], user_input: str, session_state: Dict[str, Any], session_id: str = None) -> Content:
+        """Execute the LLM-generated task plan with step logging."""
         try:
+            # FIXED: Handle both dict and list responses from LLM
+            if isinstance(task_plan, list):
+                # If task_plan is a list, wrap it in the expected structure
+                task_plan = {
+                    "tasks": task_plan,
+                    "final_goal": "Process user request",
+                    "requires_search": False
+                }
+            
             tasks = task_plan.get("tasks", [])
             final_goal = task_plan.get("final_goal", "Process user request")
             requires_search = task_plan.get("requires_search", False)
             
-            print(f"🚀 EXECUTING {len(tasks)} tasks for: {final_goal}")
+            if session_id:
+                step_logger.log_step(f"🚀 Executing {len(tasks)} tasks", "system")
+            
+            print(f"🚀 ENHANCED EXECUTING {len(tasks)} tasks for: {final_goal}")
             
             all_modifications = []
             final_message = ""
             
-            for task in tasks:
-                step = task.get("step", 0)
+            for i, task in enumerate(tasks, 1):
+                # FIXED: Handle task being a dict or having missing keys
+                if not isinstance(task, dict):
+                    continue
+                    
+                step = task.get("step", i)
                 action = task.get("action", "")
                 description = task.get("description", "")
                 parameters = task.get("parameters", {})
                 
-                print(f"📍 Step {step}: {description}")
+                if session_id:
+                    step_logger.log_step(f"⚙️ Step {step}: {description}", "tool")
+                
+                print(f"📍 Enhanced Step {step}: {description}")
                 
                 if action == "filter_modification":
-                    # Execute filter modification through search interaction agent
                     mod_result = await self._execute_filter_modification(parameters, session_state)
                     if mod_result["success"]:
                         all_modifications.extend(mod_result.get("modifications", []))
                 
                 elif action == "location_analysis":
-                    # Execute location analysis
                     loc_result = await self._execute_location_analysis(parameters, session_state)
                     if loc_result["success"]:
                         # Add discovered locations to next filter step
                         for next_task in tasks:
-                            if next_task.get("action") == "filter_modification" and "locations" in next_task.get("parameters", {}):
+                            if (isinstance(next_task, dict) and 
+                                next_task.get("action") == "filter_modification" and 
+                                "locations" in next_task.get("parameters", {})):
                                 next_task["parameters"]["locations"] = loc_result.get("similar_locations", [])
                 
                 elif action == "search_execution":
+                    if session_id:
+                        step_logger.log_step("🔍 Executing candidate search", "search")
                     # Execute search with current filters
                     search_result = await self._execute_search(session_state)
                     if search_result["success"]:
@@ -271,7 +327,15 @@ class ResDexRootAgent(BaseAgent):
                             'search_applied': True,
                             'page': 0
                         })
+                        if session_id:
+                            step_logger.log_results(
+                                len(search_result["candidates"]),
+                                search_result["total_count"]
+                            )
                         final_message = search_result.get("message", "Search completed")
+            
+            if session_id:
+                step_logger.log_completion("All tasks completed successfully")
             
             # Prepare final response
             response_data = {
@@ -290,12 +354,136 @@ class ResDexRootAgent(BaseAgent):
             return Content(data=response_data)
             
         except Exception as e:
-            logger.error(f"Task plan execution failed: {e}")
+            if session_id:
+                step_logger.log_error(f"Task plan execution failed: {str(e)}")
+            logger.error(f"Enhanced task plan execution failed: {e}")
             return Content(data={
                 "success": False,
                 "error": f"Task execution failed: {str(e)}",
                 "fallback_message": "Falling back to simple processing"
             })
+    
+    # NEW METHOD: Handle general query with logging
+    async def _handle_general_query_with_logging(self, user_input: str, session_state: Dict[str, Any], session_id: str = None) -> Content:
+        """Handle general queries using LLM with step logging."""
+        try:
+            if session_id:
+                step_logger.log_step("🤖 Generating conversational response", "llm")
+            
+            from .prompts import RootAgentPrompts
+            
+            general_prompt = RootAgentPrompts.get_general_query_prompt(user_input, session_state)
+            
+            print(f"💬 ENHANCED GENERAL QUERY: Processing '{user_input}'")
+            
+            llm_result = await self.tools["root_llm_tool"]._call_llm_direct(
+                prompt=general_prompt,
+                task="general_conversation"
+            )
+            
+            if llm_result["success"]:
+                response_text = llm_result.get("response_text", "I'm here to help!")
+                
+                if session_id:
+                    step_logger.log_completion("Response generated")
+                
+                return Content(data={
+                    "success": True,
+                    "message": response_text,
+                    "type": "general_query",
+                    "trigger_search": False,
+                    "session_state": session_state,
+                    "llm_response": True
+                })
+            else:
+                if session_id:
+                    step_logger.log_step("⚠️ LLM response failed, using fallback", "decision")
+                
+                # Simple fallback responses
+                fallback_responses = {
+                    "hi": "Hello! I'm your AI assistant for candidate search. How can I help you today?",
+                    "hello": "Hi there! I can help you search for candidates and modify filters. What would you like to do?",
+                    "help": "I can help you search for candidates, analyze results, and modify filters. Try asking me to 'search with python' or 'add java skill'.",
+                    "analyze": f"Looking at your current search results, you have {len(session_state.get('candidates', []))} candidates. Would you like me to help refine your search?",
+                }
+                
+                fallback_message = fallback_responses.get(user_input.lower(), 
+                    "I'm here to help with candidate search! You can ask me to search for candidates, modify filters, or analyze results.")
+                
+                if session_id:
+                    step_logger.log_completion("Fallback response provided")
+                
+                return Content(data={
+                    "success": True,
+                    "message": fallback_message,
+                    "type": "general_query",
+                    "trigger_search": False,
+                    "session_state": session_state,
+                    "fallback_response": True
+                })
+                
+        except Exception as e:
+            if session_id:
+                step_logger.log_error(f"General query processing failed: {str(e)}")
+            logger.error(f"Enhanced general query processing failed: {e}")
+            return Content(data={
+                "success": False,
+                "error": "Failed to process general query",
+                "message": "I encountered an error. Please try rephrasing your question."
+            })
+    
+    # ENHANCED METHOD: Handle candidate search with logging
+    async def _handle_candidate_search_with_logging(self, content: Content, session_id: str = None) -> Content:
+        """Handle candidate search requests with step logging."""
+        search_filters = content.data.get("search_filters", {})
+        
+        if session_id:
+            step_logger.log_step("🔍 Preparing candidate search", "search")
+            step_logger.log_search_execution(search_filters)
+        
+        search_result = await self.tools["search_tool"](search_filters=search_filters)
+        
+        if session_id:
+            if search_result["success"]:
+                step_logger.log_results(
+                    len(search_result.get("candidates", [])),
+                    search_result.get("total_count", 0)
+                )
+                step_logger.log_completion("Search completed")
+            else:
+                step_logger.log_error(f"Search failed: {search_result.get('error', 'Unknown error')}")
+        
+        response_data = {
+            "success": search_result["success"],
+            "candidates": search_result.get("candidates", []),
+            "total_count": search_result.get("total_count", 0),
+            "message": search_result.get("message", ""),
+            "root_agent": {
+                "name": self.config.name,
+                "version": self.config.version,
+                "tool_used": "search_tool"
+            }
+        }
+        
+        if not search_result["success"]:
+            response_data["error"] = search_result.get("error", "Search failed")
+        
+        return Content(data=response_data)
+    
+    # ORIGINAL METHODS (unchanged but kept for compatibility)
+    def _fallback_routing(self, user_input: str) -> Dict[str, Any]:
+        """Fallback routing using keyword detection."""
+        search_keywords = ["search", "find", "add", "remove", "filter", "set", "modify", "candidates"]
+        general_keywords = ["hi", "hello", "analyze", "explain", "what", "how", "help"]
+        
+        input_lower = user_input.lower()
+        
+        if any(keyword in input_lower for keyword in search_keywords):
+            return {"success": True, "request_type": "search_interaction", "confidence": 0.7}
+        elif any(keyword in input_lower for keyword in general_keywords):
+            return {"success": True, "request_type": "general_query", "confidence": 0.7}
+        else:
+            return {"success": True, "request_type": "general_query", "confidence": 0.5}
     
     async def _execute_filter_modification(self, parameters: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
         """Execute filter modification."""
@@ -430,60 +618,6 @@ class ResDexRootAgent(BaseAgent):
         })
         return await self._handle_search_interaction(content)
     
-    async def _handle_general_query(self, user_input: str, session_state: Dict[str, Any]) -> Content:
-        """NEW: Handle general queries using LLM."""
-        try:
-            from .prompts import RootAgentPrompts
-            
-            general_prompt = RootAgentPrompts.get_general_query_prompt(user_input, session_state)
-            
-            print(f"💬 GENERAL QUERY: Processing '{user_input}'")
-            
-            llm_result = await self.tools["root_llm_tool"]._call_llm_direct(
-                prompt=general_prompt,
-                task="general_conversation"
-            )
-            
-            if llm_result["success"]:
-                response_text = llm_result.get("response_text", "I'm here to help!")
-                
-                return Content(data={
-                    "success": True,
-                    "message": response_text,
-                    "type": "general_query",
-                    "trigger_search": False,
-                    "session_state": session_state,
-                    "llm_response": True
-                })
-            else:
-                # Simple fallback responses
-                fallback_responses = {
-                    "hi": "Hello! I'm your AI assistant for candidate search. How can I help you today?",
-                    "hello": "Hi there! I can help you search for candidates and modify filters. What would you like to do?",
-                    "help": "I can help you search for candidates, analyze results, and modify search filters. Try asking me to 'search with python' or 'add java skill'.",
-                    "analyze": f"Looking at your current search results, you have {len(session_state.get('candidates', []))} candidates. Would you like me to help refine your search?",
-                }
-                
-                fallback_message = fallback_responses.get(user_input.lower(), 
-                    "I'm here to help with candidate search! You can ask me to search for candidates, modify filters, or analyze results.")
-                
-                return Content(data={
-                    "success": True,
-                    "message": fallback_message,
-                    "type": "general_query",
-                    "trigger_search": False,
-                    "session_state": session_state,
-                    "fallback_response": True
-                })
-                
-        except Exception as e:
-            logger.error(f"General query processing failed: {e}")
-            return Content(data={
-                "success": False,
-                "error": "Failed to process general query",
-                "message": "I encountered an error. Please try rephrasing your question."
-            })
-    
     # Keep original methods for backward compatibility
     async def _handle_search_interaction(self, content: Content) -> Content:
         """Handle search interaction requests through sub-agent (ORIGINAL)."""
@@ -504,28 +638,6 @@ class ResDexRootAgent(BaseAgent):
         
         return result
     
-    async def _handle_candidate_search(self, content: Content) -> Content:
-        """Handle candidate search requests (ORIGINAL)."""
-        search_filters = content.data.get("search_filters", {})
-        search_result = await self.tools["search_tool"](search_filters=search_filters)
-        
-        response_data = {
-            "success": search_result["success"],
-            "candidates": search_result.get("candidates", []),
-            "total_count": search_result.get("total_count", 0),
-            "message": search_result.get("message", ""),
-            "root_agent": {
-                "name": self.config.name,
-                "version": self.config.version,
-                "tool_used": "search_tool"
-            }
-        }
-        
-        if not search_result["success"]:
-            response_data["error"] = search_result.get("error", "Search failed")
-        
-        return Content(data=response_data)
-    
     async def _handle_health_check(self, content: Content) -> Content:
         """Handle health check requests (ORIGINAL)."""
         from .utils.db_manager import db_manager
@@ -545,7 +657,7 @@ class ResDexRootAgent(BaseAgent):
                 "name": self.config.name,
                 "version": self.config.version,
                 "config_valid": True,
-                "enhanced_features": ["llm_routing", "task_breakdown", "general_queries"]
+                "enhanced_features": ["llm_routing", "task_breakdown", "general_queries", "step_logging"]
             },
             "database": {
                 "status": "connected" if db_status["success"] else "error",
@@ -560,4 +672,4 @@ class ResDexRootAgent(BaseAgent):
             }
         }
         
-        return Content(data=health_data)    
+        return Content(data=health_data)

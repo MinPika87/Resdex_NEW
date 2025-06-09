@@ -13,7 +13,7 @@ load_dotenv()
 
 class DatabaseConfig(BaseModel):
     """Database connection configuration."""
-    host: str = Field(default_factory=lambda: os.getenv("DB_HOST", "172.10.112.169:3306"))
+    host: str = Field(default_factory=lambda: os.getenv("DB_HOST", "172.10.112.103:3306"))
     user: str = Field(default_factory=lambda: os.getenv("DB_USER", "user_analytics"))
     password: str = Field(default_factory=lambda: os.getenv("DB_PASSWORD", "anaKm7Iv80l"))
     database: str = Field(default_factory=lambda: os.getenv("DB_NAME", "ja_LSI"))

@@ -2,7 +2,7 @@
 Pagination components for candidate results - EXACT match to your original but fixed for Streamlit v1.12.0
 """
 
-import streamlit as st
+import streamlit as st#type: ignore
 from resdex_agent.utils.constants import UI_CONFIG
 
 class Pagination:
