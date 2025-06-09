@@ -1,6 +1,6 @@
-# resdex_agent/ui/components/chat_interface.py - FIXED for Streamlit threading
+# resdex_agent/ui/components/chat_interface.py - FIXED for LIVE step streaming
 """
-Chat interface component - FIXED to avoid threading issues with Streamlit 1.12
+Chat interface component - FIXED to show LIVE streaming steps
 """
 
 import streamlit as st
@@ -11,11 +11,11 @@ from typing import Dict, Any, Optional
 
 # Step logging imports
 from ...utils.step_logger import step_logger
-from .step_display import StepDisplay
+from .step_display import StepDisplay, poll_and_update_steps
 
 
 class ChatInterface:
-    """Chat interface component with FIXED step display (no threading)."""
+    """Chat interface component with FIXED LIVE step streaming."""
     
     def __init__(self, session_state: Dict[str, Any], root_agent):
         self.session_state = session_state
@@ -30,8 +30,8 @@ class ChatInterface:
         # Display chat history
         self._render_chat_history()
         
-        # Chat input - FIXED to avoid threading
-        self._render_chat_input_fixed()
+        # Chat input - FIXED for live step streaming
+        self._render_chat_input_with_live_steps()
         
         # Quick action buttons
         self._render_quick_actions()
@@ -67,8 +67,8 @@ class ChatInterface:
             if len(chat_history) > 6:
                 st.caption(f"Showing recent 6 messages of {len(chat_history)} total")
     
-    def _render_chat_input_fixed(self):
-        """FIXED: Render chat input without threading issues."""
+    def _render_chat_input_with_live_steps(self):
+        """FIXED: Render chat input with LIVE step streaming."""
         with st.form(key="chat_input_form", clear_on_submit=True):
             user_input = st.text_input(
                 "Ask AI Assistant",
@@ -79,20 +79,22 @@ class ChatInterface:
             chat_submitted = st.form_submit_button("Send 💬")
             
             if chat_submitted and user_input.strip():
-                # FIXED: Process immediately without threading
+                # FIXED: Process with LIVE step streaming
                 session_id = str(uuid.uuid4())
-                self._process_message_with_simple_steps(user_input.strip(), session_id)
+                self._process_message_with_live_steps(user_input.strip(), session_id)
         
         # Clear chat button
         if st.button("Clear Chat 🗑️"):
             self.session_state['chat_history'] = []
             st.experimental_rerun()
     
-    def _process_message_with_simple_steps(self, user_input: str, session_id: str):
-        """ENHANCED: Process message with REAL step display from step_logger."""
+    def _process_message_with_live_steps(self, user_input: str, session_id: str):
+        """FIXED: Process message with LIVE step streaming display that STAYS visible."""
         try:
-            # Create step placeholder
-            step_placeholder = st.empty()
+            # Create step display container that will STAY visible
+            st.markdown("---")
+            st.markdown("### 🔄 AI Processing (Live)")
+            step_container = st.empty()
             
             # Initialize step logging
             step_logger.start_session(session_id)
@@ -103,71 +105,144 @@ class ChatInterface:
                 "content": user_input
             })
             
-            # Process the message with REAL-TIME step updates
-            result = asyncio.run(self._handle_chat_message_with_live_steps(user_input, session_id, step_placeholder))
+            # Process the message with LIVE step updates
+            success = asyncio.run(self._handle_chat_message_with_step_streaming(
+                user_input, session_id, step_container
+            ))
             
-            # Show final completion message briefly then clear
-            step_placeholder.markdown("🎯 **Processing complete!**")
-            time.sleep(10)
-            
-            # Clear step display
-            step_placeholder.empty()
+            # ALWAYS keep the step display visible with final status using clean layout
+            final_steps = step_logger.get_steps(session_id)
+            if final_steps:
+                # Use clean Streamlit layout with proper boundaries
+                with step_container.container():
+                    # Status header
+                    if success:
+                        st.success("✅ AI Processing Complete")
+                    else:
+                        st.error("❌ AI Processing Failed")
+                    
+                    # Header with step count
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.markdown("**🔄 AI Processing Steps**")
+                    with col2:
+                        st.markdown('<span style="background: #6c757d; color: white; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">DONE</span>', unsafe_allow_html=True)
+                    
+                    # Show all steps with clean layout that fits within boundaries
+                    for step in final_steps:
+                        icon = self.step_display.step_icons.get(step["type"], "💡")
+                        
+                        # Adjusted columns: smaller icon, larger message area, smaller timestamp
+                        step_col1, step_col2, step_col3 = st.columns([0.5, 6, 1.5])
+                        
+                        with step_col1:
+                            st.markdown(f"<div style='text-align: center; font-size: 14px;'>{icon}</div>", unsafe_allow_html=True)
+                        
+                        with step_col2:
+                            # Add word wrap and limit text length to prevent overflow
+                            message = step['message']
+                            if len(message) > 45:
+                                message = message[:42] + "..."
+                            st.markdown(f"<div style='padding-top: 2px; color: #666; font-size: 12px; word-wrap: break-word;'>{message}</div>", unsafe_allow_html=True)
+                        
+                        with step_col3:
+                            # Show clean timestamp in HH:MM:SS format
+                            timestamp = step['timestamp']
+                            st.markdown(f"<div style='text-align: right; font-size: 9px; color: #999; padding-top: 4px; font-family: monospace;'>{timestamp}</div>", unsafe_allow_html=True)
+                    
+                    # Summary
+                    st.caption(f"📊 {len(final_steps)} processing steps")
             
             # Trigger rerun to show new messages
             st.experimental_rerun()
-            
+                
         except Exception as e:
             step_logger.log_error(f"Chat processing failed: {str(e)}")
             st.error(f"❌ An error occurred: {str(e)}")
     
-    def _display_step_summary(self, placeholder, steps):
-        """REMOVED: No more HTML step summary - just clear the placeholder."""
-        # Simply clear the placeholder instead of showing HTML
-        placeholder.empty()
-    
-    async def _handle_chat_message_with_live_steps(self, user_input: str, session_id: str, step_placeholder) -> bool:
-        """ENHANCED: Handle chat message with REAL-TIME live step updates."""
+    async def _handle_chat_message_with_step_streaming(self, user_input: str, session_id: str, step_container) -> bool:
+        """FIXED: Handle chat message with ALL steps accumulating in real-time."""
         try:
-            # Show steps as they happen - ONE AT A TIME
-            def update_steps():
+            # Function to update ALL accumulated steps using clean Streamlit layout
+            def update_all_steps():
+                """Update steps display with ALL accumulated steps using clean formatting"""
                 current_steps = step_logger.get_steps(session_id)
                 if current_steps:
-                    latest_step = current_steps[-1]
-                    icon = self.step_display.step_icons.get(latest_step["type"], "💡")
-                    # Show ONLY the latest step in real-time
-                    step_placeholder.markdown(f"**{icon} {latest_step['message']}**")
+                    # Use Streamlit components with better formatting
+                    with step_container.container():
+                        # Header with live badge
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.markdown("**🔄 AI Processing Steps**")
+                        with col2:
+                            st.markdown('<span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">LIVE</span>', unsafe_allow_html=True)
+                        
+                        # Show steps with clean formatting and proper boundaries
+                        for step in current_steps[-15:]:  # Show last 15 steps
+                            icon = self.step_display.step_icons.get(step["type"], "💡")
+                            
+                            # Adjusted columns: smaller icon, larger message area, smaller timestamp
+                            step_col1, step_col2, step_col3 = st.columns([0.5, 6, 1.5])
+                            
+                            with step_col1:
+                                st.markdown(f"<div style='text-align: center; font-size: 14px;'>{icon}</div>", unsafe_allow_html=True)
+                            
+                            with step_col2:
+                                # Add word wrap and limit text length
+                                message = step['message']
+                                if len(message) > 45:
+                                    message = message[:42] + "..."
+                                st.markdown(f"<div style='padding-top: 2px; font-size: 12px; word-wrap: break-word;'>{message}</div>", unsafe_allow_html=True)
+                            
+                            with step_col3:
+                                # Show clean timestamp in HH:MM:SS format
+                                timestamp = step['timestamp']
+                                st.markdown(f"<div style='text-align: right; font-size: 9px; color: #999; padding-top: 4px; font-family: monospace;'>{timestamp}</div>", unsafe_allow_html=True)
             
-            # Log and show initial step
+            # Log initial step and update display
             step_logger.log_step(f"🔍 Analyzing: \"{user_input[:40]}{'...' if len(user_input) > 40 else ''}\"", "routing")
-            update_steps()
+            update_all_steps()
+            await asyncio.sleep(0.3)  # Longer delay to see step accumulation
             
             # Check for "show more candidates" command
             if self._is_show_more_command(user_input):
                 step_logger.log_step("📋 Show more candidates detected", "decision")
-                update_steps()
+                update_all_steps()
+                await asyncio.sleep(0.3)
+                
                 step_logger.log_tool_activation("Candidate Manager", "expanding results")
-                update_steps()
+                update_all_steps()
+                await asyncio.sleep(0.3)
+                
                 await self._handle_show_more_command()
+                
                 step_logger.log_completion("Additional candidates loaded")
-                update_steps()
+                update_all_steps()
                 return True
             
             # Prepare session state
             session_state_dict = self._get_clean_session_state()
             step_logger.log_step("🔧 Preparing agent context", "system")
-            update_steps()
+            update_all_steps()
+            await asyncio.sleep(0.3)
             
-            # Determine routing
+            # Determine routing with visual feedback
             if self._is_search_related(user_input):
                 step_logger.log_routing_decision(user_input, "search_interaction", 0.9)
-                update_steps()
+                update_all_steps()
+                await asyncio.sleep(0.3)
+                
                 step_logger.log_tool_activation("Search Interaction Agent")
-                update_steps()
+                update_all_steps()
+                await asyncio.sleep(0.3)
             else:
                 step_logger.log_routing_decision(user_input, "general_query", 0.85)
-                update_steps()
+                update_all_steps()
+                await asyncio.sleep(0.3)
+                
                 step_logger.log_tool_activation("General LLM Responder")
-                update_steps()
+                update_all_steps()
+                await asyncio.sleep(0.3)
             
             # Process through agent
             from ...agent import Content
@@ -178,36 +253,62 @@ class ChatInterface:
             })
             
             step_logger.log_llm_call("Qwen/Qwen3-32B", "processing")
-            update_steps()
+            update_all_steps()
+            await asyncio.sleep(0.3)
             
-            result = await self.root_agent.execute(content)
+            # Execute the agent request and capture steps with error handling
+            try:
+                # Execute the agent request
+                result = await self.root_agent.execute(content)
+                
+                # If there was a task breakdown error, log recovery step
+                current_steps = step_logger.get_steps(session_id)
+                if current_steps and any("Task breakdown failed" in step.get('message', '') for step in current_steps):
+                    step_logger.log_step("🔄 Using fallback search processing", "tool")
+                    update_all_steps()
+                    await asyncio.sleep(2.0)
+                
+                # After execution, update display with ALL steps that were logged
+                update_all_steps()
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                # Even on error, show what steps we captured
+                step_logger.log_error(f"Agent execution failed: {str(e)}")
+                update_all_steps()
+                raise e
             
+            # Process the result and update steps throughout with longer delays for post-LLM steps
             if result.data["success"]:
                 response_type = result.data.get("type", "search_interaction")
                 
                 if response_type == "general_query":
                     step_logger.log_step("💬 Generating conversational response", "llm")
-                    update_steps()
+                    update_all_steps()
+                    await asyncio.sleep(0.5)  # 5 second delay for post-LLM visibility
                     
                     ai_message = result.data.get("message", "I'm here to help!")
                     self.session_state['chat_history'].append({
                         "role": "assistant",
                         "content": ai_message
                     })
+                    
                     step_logger.log_completion("Response ready")
-                    update_steps()
+                    update_all_steps()
+                    await asyncio.sleep(0.5)  # 5 second delay for final step
                     
                 else:
                     # Handle search interaction responses
                     step_logger.log_step("🔧 Processing search modifications", "tool")
-                    update_steps()
+                    update_all_steps()
+                    await asyncio.sleep(0.5)  # 5 second delay
                     
                     if "session_state" in result.data:
                         updated_state = result.data["session_state"]
                         if isinstance(updated_state, dict):
                             self._update_session_state_safely(updated_state)
                             step_logger.log_step("💾 Session state updated", "system")
-                            update_steps()
+                            update_all_steps()
+                            await asyncio.sleep(0.5)  # 5 second delay
                     
                     ai_message = result.data.get("message", "Request processed successfully.")
                     self.session_state['chat_history'].append({
@@ -218,10 +319,10 @@ class ChatInterface:
                     # Handle search trigger
                     if result.data.get("trigger_search", False):
                         step_logger.log_step("🔍 Search triggered", "search")
-                        update_steps()
-                        await self._handle_triggered_search_simple(result.data, session_id)
-                        # Update steps after search
-                        update_steps()
+                        update_all_steps()
+                        await asyncio.sleep(0.5)  # 5 second delay
+                        
+                        await self._handle_triggered_search_with_steps(result.data, session_id, update_all_steps)
                     
                     # Handle automatic search results
                     if "candidates" in result.data.get("session_state", {}):
@@ -229,7 +330,9 @@ class ChatInterface:
                             len(result.data["session_state"]["candidates"]),
                             result.data["session_state"].get("total_results", 0)
                         )
-                        update_steps()
+                        update_all_steps()
+                        await asyncio.sleep(0.5)  # 5 second delay
+                        
                         success_msg = "🎯 Search completed!"
                         self.session_state['chat_history'].append({
                             "role": "assistant", 
@@ -237,14 +340,17 @@ class ChatInterface:
                         })
                     
                     step_logger.log_completion("Processing complete")
-                    update_steps()
+                    update_all_steps()
+                    await asyncio.sleep(5.0)  # 5 second delay for final step
                 
                 return True
                 
             else:
                 # Handle error
                 step_logger.log_error(result.data.get("error", "Unknown error"))
-                update_steps()
+                update_all_steps()
+                await asyncio.sleep(5.0)  # 5 second delay for error visibility
+                
                 error_message = result.data.get("error", "Sorry, I couldn't process that request.")
                 self.session_state['chat_history'].append({
                     "role": "assistant",
@@ -254,7 +360,8 @@ class ChatInterface:
             
         except Exception as e:
             step_logger.log_error(f"Chat processing failed: {str(e)}")
-            step_placeholder.markdown(f"❌ **Error:** {str(e)}")
+            step_container.error(f"❌ **Error:** {str(e)}")
+            
             error_msg = f"❌ An error occurred: {str(e)}"
             self.session_state['chat_history'].append({
                 "role": "assistant",
@@ -262,136 +369,12 @@ class ChatInterface:
             })
             return False
     
-    async def _handle_chat_message_simple(self, user_input: str, session_id: str) -> bool:
-        """SIMPLIFIED: Handle chat message without complex threading."""
+    async def _handle_triggered_search_with_steps(self, result_data: Dict[str, Any], session_id: str, update_callback):
+        """Handle search triggered by AI agent with live step updates."""
         try:
-            # Log basic steps
-            step_logger.log_step(f"🔍 Analyzing: \"{user_input[:40]}{'...' if len(user_input) > 40 else ''}\"", "routing")
-            
-            # Check for "show more candidates" command
-            if self._is_show_more_command(user_input):
-                step_logger.log_step("📋 Show more candidates detected", "decision")
-                await self._handle_show_more_command()
-                step_logger.log_completion("Additional candidates loaded")
-                return True
-            
-            # Prepare session state
-            session_state_dict = self._get_clean_session_state()
-            step_logger.log_step("🔧 Preparing agent context", "system")
-            
-            # Determine routing
-            if self._is_search_related(user_input):
-                step_logger.log_routing_decision(user_input, "search_interaction", 0.9)
-            else:
-                step_logger.log_routing_decision(user_input, "general_query", 0.85)
-            
-            # Process through agent
-            from ...agent import Content
-            content = Content(data={
-                "user_input": user_input,
-                "session_state": session_state_dict,
-                "session_id": session_id
-            })
-            
-            step_logger.log_llm_call("Qwen/Qwen3-32B", "processing")
-            result = await self.root_agent.execute(content)
-            
-            if result.data["success"]:
-                response_type = result.data.get("type", "search_interaction")
-                
-                if response_type == "general_query":
-                    ai_message = result.data.get("message", "I'm here to help!")
-                    self.session_state['chat_history'].append({
-                        "role": "assistant",
-                        "content": ai_message
-                    })
-                    step_logger.log_completion("Response ready")
-                    
-                else:
-                    # Handle search interaction responses
-                    if "session_state" in result.data:
-                        updated_state = result.data["session_state"]
-                        if isinstance(updated_state, dict):
-                            self._update_session_state_safely(updated_state)
-                    
-                    ai_message = result.data.get("message", "Request processed successfully.")
-                    self.session_state['chat_history'].append({
-                        "role": "assistant",
-                        "content": ai_message
-                    })
-                    
-                    # Handle search trigger
-                    if result.data.get("trigger_search", False):
-                        await self._handle_triggered_search_simple(result.data, session_id)
-                    
-                    # Handle automatic search results
-                    if "candidates" in result.data.get("session_state", {}):
-                        step_logger.log_results(
-                            len(result.data["session_state"]["candidates"]),
-                            result.data["session_state"].get("total_results", 0)
-                        )
-                        success_msg = "🎯 Search completed!"
-                        self.session_state['chat_history'].append({
-                            "role": "assistant", 
-                            "content": success_msg
-                        })
-                    
-                    step_logger.log_completion("Processing complete")
-                
-                return True
-                
-            else:
-                # Handle error
-                step_logger.log_error(result.data.get("error", "Unknown error"))
-                error_message = result.data.get("error", "Sorry, I couldn't process that request.")
-                self.session_state['chat_history'].append({
-                    "role": "assistant",
-                    "content": f"❌ {error_message}"
-                })
-                return False
-            
-        except Exception as e:
-            step_logger.log_error(f"Chat processing failed: {str(e)}")
-            error_msg = f"❌ An error occurred: {str(e)}"
-            self.session_state['chat_history'].append({
-                "role": "assistant",
-                "content": error_msg
-            })
-            return False
-    
-    def _render_quick_actions(self):
-        """Render quick action buttons - ENHANCED to show real steps."""
-        st.markdown("**Quick Actions:**")
-        
-        if st.button("📊 Analyze Results", help="Get insights about current search results"):
-            session_id = str(uuid.uuid4())
-            self._process_message_with_simple_steps("analyze the current search results", session_id)
-        
-        if st.button("🔧 Sort by Experience", help="Sort candidates by experience level"):
-            session_id = str(uuid.uuid4())
-            self._process_message_with_simple_steps("sort candidates by experience", session_id)
-        
-        if st.button("💰 Sort by Salary", help="Sort candidates by salary expectations"):
-            session_id = str(uuid.uuid4())
-            self._process_message_with_simple_steps("sort candidates by salary", session_id)
-        
-        if st.button("📍 Filter by Location", help="Help with location-based filtering"):
-            session_id = str(uuid.uuid4())
-            self._process_message_with_simple_steps("help me filter by location", session_id)
-    
-    def _is_search_related(self, user_input: str) -> bool:
-        """Determine if input is search-related."""
-        search_keywords = [
-            "search", "find", "add", "remove", "filter", "set", "modify", 
-            "candidates", "python", "java", "javascript", "skill", "experience",
-            "salary", "location", "bangalore", "mumbai", "delhi"
-        ]
-        return any(keyword in user_input.lower() for keyword in search_keywords)
-    
-    async def _handle_triggered_search_simple(self, result_data: Dict[str, Any], session_id: str):
-        """SIMPLIFIED: Handle search triggered by AI agent."""
-        try:
-            step_logger.log_step("⚙️ Preparing search", "search")
+            step_logger.log_step("⚙️ Preparing search execution", "search")
+            update_callback()
+            await asyncio.sleep(0.1)
             
             updated_state = result_data.get("session_state", self.session_state)
             if not isinstance(updated_state, dict):
@@ -409,6 +392,8 @@ class ChatInterface:
             }
             
             step_logger.log_search_execution(search_filters)
+            update_callback()
+            await asyncio.sleep(0.1)
             
             # Execute search
             from ...agent import Content
@@ -419,12 +404,18 @@ class ChatInterface:
             })
             
             step_logger.log_step("📡 Calling ResDex API", "search")
+            update_callback()
+            await asyncio.sleep(0.1)
+            
             search_result = await self.root_agent.execute(search_content)
             
             if search_result.data["success"]:
                 candidates = search_result.data["candidates"]
                 total_count = search_result.data["total_count"]
+                
                 step_logger.log_results(len(candidates), total_count)
+                update_callback()
+                await asyncio.sleep(0.1)
                 
                 # Update session state
                 self.session_state['candidates'] = candidates
@@ -439,10 +430,12 @@ class ChatInterface:
                     "content": success_msg
                 })
                 
-                step_logger.log_completion("Search completed")
+                step_logger.log_completion("Search completed successfully")
+                update_callback()
             else:
                 error_msg = search_result.data.get('error', 'Unknown error')
                 step_logger.log_error(f"Search failed: {error_msg}")
+                update_callback()
                 
                 error_response = f"❌ Search failed: {error_msg}"
                 self.session_state['chat_history'].append({
@@ -452,11 +445,46 @@ class ChatInterface:
                 
         except Exception as e:
             step_logger.log_error(f"Search execution failed: {str(e)}")
+            update_callback()
+            
             error_msg = f"❌ Search execution failed: {str(e)}"
             self.session_state['chat_history'].append({
                 "role": "assistant",
                 "content": error_msg
             })
+    
+    def _render_quick_actions(self):
+        """Render quick action buttons with live step streaming."""
+        st.markdown("**Quick Actions:**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📊 Analyze Results", help="Get insights about current search results"):
+                session_id = str(uuid.uuid4())
+                self._process_message_with_live_steps("analyze the current search results", session_id)
+            
+            if st.button("🔧 Sort by Experience", help="Sort candidates by experience level"):
+                session_id = str(uuid.uuid4())
+                self._process_message_with_live_steps("sort candidates by experience", session_id)
+        
+        with col2:
+            if st.button("💰 Sort by Salary", help="Sort candidates by salary expectations"):
+                session_id = str(uuid.uuid4())
+                self._process_message_with_live_steps("sort candidates by salary", session_id)
+            
+            if st.button("📍 Filter by Location", help="Help with location-based filtering"):
+                session_id = str(uuid.uuid4())
+                self._process_message_with_live_steps("help me filter by location", session_id)
+    
+    # [Keep all other methods unchanged - _is_search_related, _handle_show_more_command, etc.]
+    def _is_search_related(self, user_input: str) -> bool:
+        """Determine if input is search-related."""
+        search_keywords = [
+            "search", "find", "add", "remove", "filter", "set", "modify", 
+            "candidates", "python", "java", "javascript", "skill", "experience",
+            "salary", "location", "bangalore", "mumbai", "delhi"
+        ]
+        return any(keyword in user_input.lower() for keyword in search_keywords)
 
     def _is_show_more_command(self, user_input: str) -> bool:
         """Check if user is asking to show more candidates."""

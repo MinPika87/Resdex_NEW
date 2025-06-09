@@ -1,4 +1,4 @@
-# resdex_agent/agent.py - ENHANCED with step logging
+# resdx_agent/agent.py - ENHANCED with step logging
 """
 Enhanced Root ResDex Agent with LLM routing, task breakdown, and step logging.
 """
@@ -141,8 +141,9 @@ class ResDexRootAgent(BaseAgent):
 
     # NEW METHOD: Enhanced intelligent routing with step logging
     async def _handle_intelligent_routing_with_logging(self, user_input: str, session_state: Dict[str, Any], session_id: str = None) -> Content:
-        """Enhanced intelligent routing with step logging."""
         if session_id:
+            # Ensure step logger is using the correct session
+            step_logger.current_session_id = session_id
             step_logger.log_step(f"🧠 Analyzing input complexity", "routing")
         
         print(f"🧠 ENHANCED ROOT AGENT: Intelligent routing for '{user_input}'")
@@ -176,12 +177,13 @@ class ResDexRootAgent(BaseAgent):
                 "success": False,
                 "error": f"Unknown routed request type: {request_type}"
             })
+
     
     # NEW METHOD: LLM routing with step logging
     async def _route_request_with_logging(self, user_input: str, session_state: Dict[str, Any], session_id: str = None) -> Dict[str, Any]:
-        """Use LLM to route the request with step logging."""
         try:
             if session_id:
+                step_logger.current_session_id = session_id
                 step_logger.log_step("🤖 Consulting routing LLM", "llm")
             
             from .prompts import RootAgentPrompts
@@ -218,53 +220,30 @@ class ResDexRootAgent(BaseAgent):
     
     # NEW METHOD: Search with task breakdown and logging
     async def _handle_search_with_task_breakdown_logged(self, user_input: str, session_state: Dict[str, Any], session_id: str = None) -> Content:
-        """Handle search requests with LLM task breakdown and logging."""
+        """Handle search requests with direct fallback to search interaction."""
         try:
             if session_id:
                 step_logger.log_step("🔧 Activating Search Interaction Agent", "tool")
             
-            from .prompts import RootAgentPrompts
-            
-            # Step 1: Get task breakdown from LLM
-            task_prompt = RootAgentPrompts.get_task_breakdown_prompt(user_input, session_state)
+            # SIMPLIFIED: Skip task breakdown and go directly to search interaction
+            print(f"🔧 DIRECT SEARCH INTERACTION: Processing '{user_input}'")
             
             if session_id:
-                step_logger.log_step("📋 Creating task execution plan", "llm")
+                step_logger.log_step("🔄 Using direct search processing", "tool")
             
-            print(f"🧠 ENHANCED TASK BREAKDOWN: Analyzing '{user_input}'")
-            
-            llm_result = await self.tools["root_llm_tool"]._call_llm_direct(
-                prompt=task_prompt,
-                task="task_breakdown"
-            )
-            
-            if llm_result["success"]:
-                task_plan = llm_result["parsed_response"]
-                if session_id:
-                    step_logger.log_step(f"✅ Plan created: {len(task_plan.get('tasks', []))} steps", "system")
-                
-                print(f"📋 ENHANCED TASK PLAN: {task_plan.get('final_goal', 'Unknown goal')}")
-                
-                # Step 2: Execute the task plan
-                return await self._execute_task_plan_with_logging(task_plan, user_input, session_state, session_id)
-            else:
-                if session_id:
-                    step_logger.log_step("⚠️ Task breakdown failed, using simple processing", "decision")
-                # Fallback to original search interaction
-                print("⚠️ Enhanced task breakdown failed, using fallback")
-                return await self._fallback_to_search_interaction(user_input, session_state)
+            # Go directly to search interaction without task breakdown
+            return await self._fallback_to_search_interaction(user_input, session_state, session_id)
                 
         except Exception as e:
             if session_id:
-                step_logger.log_error(f"Task breakdown failed: {str(e)}")
-            logger.error(f"Enhanced task breakdown failed: {e}")
-            return await self._fallback_to_search_interaction(user_input, session_state)
+                step_logger.log_error(f"Search processing failed: {str(e)}")
+            logger.error(f"Enhanced search processing failed: {e}")
+            return await self._fallback_to_search_interaction(user_input, session_state, session_id)
     
     # NEW METHOD: Execute task plan with logging
     async def _execute_task_plan_with_logging(self, task_plan: Dict[str, Any], user_input: str, session_state: Dict[str, Any], session_id: str = None) -> Content:
-        """Execute the LLM-generated task plan with step logging."""
         try:
-            # FIXED: Handle both dict and list responses from LLM
+            # FIXED: Handle both dict and list responses from LLM properly
             if isinstance(task_plan, list):
                 # If task_plan is a list, wrap it in the expected structure
                 task_plan = {
@@ -272,6 +251,11 @@ class ResDexRootAgent(BaseAgent):
                     "final_goal": "Process user request",
                     "requires_search": False
                 }
+            elif not isinstance(task_plan, dict):
+                # If it's neither list nor dict, create a fallback structure
+                if session_id:
+                    step_logger.log_error("Invalid task plan format received")
+                return await self._fallback_to_search_interaction(user_input, session_state, session_id)
             
             tasks = task_plan.get("tasks", [])
             final_goal = task_plan.get("final_goal", "Process user request")
@@ -282,17 +266,25 @@ class ResDexRootAgent(BaseAgent):
             
             print(f"🚀 ENHANCED EXECUTING {len(tasks)} tasks for: {final_goal}")
             
+            # If no tasks or invalid tasks, fall back to search interaction
+            if not tasks or not isinstance(tasks, list):
+                if session_id:
+                    step_logger.log_step("⚠️ No valid tasks found, using fallback processing", "decision")
+                return await self._fallback_to_search_interaction(user_input, session_state, session_id)
+            
             all_modifications = []
             final_message = ""
             
             for i, task in enumerate(tasks, 1):
-                # FIXED: Handle task being a dict or having missing keys
+                # FIXED: Handle task being a dict or having missing keys with better error handling
                 if not isinstance(task, dict):
+                    if session_id:
+                        step_logger.log_step(f"⚠️ Skipping invalid task {i}", "decision")
                     continue
                     
                 step = task.get("step", i)
                 action = task.get("action", "")
-                description = task.get("description", "")
+                description = task.get("description", f"Task {i}")
                 parameters = task.get("parameters", {})
                 
                 if session_id:
@@ -300,39 +292,50 @@ class ResDexRootAgent(BaseAgent):
                 
                 print(f"📍 Enhanced Step {step}: {description}")
                 
-                if action == "filter_modification":
-                    mod_result = await self._execute_filter_modification(parameters, session_state)
-                    if mod_result["success"]:
-                        all_modifications.extend(mod_result.get("modifications", []))
-                
-                elif action == "location_analysis":
-                    loc_result = await self._execute_location_analysis(parameters, session_state)
-                    if loc_result["success"]:
-                        # Add discovered locations to next filter step
-                        for next_task in tasks:
-                            if (isinstance(next_task, dict) and 
-                                next_task.get("action") == "filter_modification" and 
-                                "locations" in next_task.get("parameters", {})):
-                                next_task["parameters"]["locations"] = loc_result.get("similar_locations", [])
-                
-                elif action == "search_execution":
-                    if session_id:
-                        step_logger.log_step("🔍 Executing candidate search", "search")
-                    # Execute search with current filters
-                    search_result = await self._execute_search(session_state)
-                    if search_result["success"]:
-                        session_state.update({
-                            'candidates': search_result["candidates"],
-                            'total_results': search_result["total_count"],
-                            'search_applied': True,
-                            'page': 0
-                        })
+                try:
+                    if action == "filter_modification":
+                        mod_result = await self._execute_filter_modification(parameters, session_state)
+                        if mod_result["success"]:
+                            all_modifications.extend(mod_result.get("modifications", []))
+                    
+                    elif action == "location_analysis":
+                        loc_result = await self._execute_location_analysis(parameters, session_state)
+                        if loc_result["success"]:
+                            # Add discovered locations to next filter step
+                            for next_task in tasks:
+                                if (isinstance(next_task, dict) and 
+                                    next_task.get("action") == "filter_modification" and 
+                                    "locations" in next_task.get("parameters", {})):
+                                    next_task["parameters"]["locations"] = loc_result.get("similar_locations", [])
+                    
+                    elif action == "search_execution":
                         if session_id:
-                            step_logger.log_results(
-                                len(search_result["candidates"]),
-                                search_result["total_count"]
-                            )
-                        final_message = search_result.get("message", "Search completed")
+                            step_logger.log_step("🔍 Executing candidate search", "search")
+                        # Execute search with current filters
+                        search_result = await self._execute_search(session_state)
+                        if search_result["success"]:
+                            session_state.update({
+                                'candidates': search_result["candidates"],
+                                'total_results': search_result["total_count"],
+                                'search_applied': True,
+                                'page': 0
+                            })
+                            if session_id:
+                                step_logger.log_results(
+                                    len(search_result["candidates"]),
+                                    search_result["total_count"]
+                                )
+                            final_message = search_result.get("message", "Search completed")
+                    
+                    else:
+                        if session_id:
+                            step_logger.log_step(f"⚠️ Unknown action: {action}", "decision")
+                        
+                except Exception as task_error:
+                    if session_id:
+                        step_logger.log_error(f"Task {i} failed: {str(task_error)}")
+                    print(f"❌ Task {i} failed: {task_error}")
+                    continue
             
             if session_id:
                 step_logger.log_completion("All tasks completed successfully")
@@ -357,17 +360,16 @@ class ResDexRootAgent(BaseAgent):
             if session_id:
                 step_logger.log_error(f"Task plan execution failed: {str(e)}")
             logger.error(f"Enhanced task plan execution failed: {e}")
-            return Content(data={
-                "success": False,
-                "error": f"Task execution failed: {str(e)}",
-                "fallback_message": "Falling back to simple processing"
-            })
-    
+            
+            # ENHANCED: Always fall back to search interaction on error
+            print(f"⚠️ Task plan failed, falling back to search interaction for: {user_input}")
+            return await self._fallback_to_search_interaction(user_input, session_state, session_id)
+
     # NEW METHOD: Handle general query with logging
     async def _handle_general_query_with_logging(self, user_input: str, session_state: Dict[str, Any], session_id: str = None) -> Content:
-        """Handle general queries using LLM with step logging."""
         try:
             if session_id:
+                step_logger.current_session_id = session_id
                 step_logger.log_step("🤖 Generating conversational response", "llm")
             
             from .prompts import RootAgentPrompts
@@ -385,7 +387,8 @@ class ResDexRootAgent(BaseAgent):
                 response_text = llm_result.get("response_text", "I'm here to help!")
                 
                 if session_id:
-                    step_logger.log_completion("Response generated")
+                    step_logger.log_step("🎯 Response generated", "completion")
+                    step_logger.log_completion("Response ready")
                 
                 return Content(data={
                     "success": True,
@@ -609,14 +612,30 @@ class ResDexRootAgent(BaseAgent):
         
         return await self.tools["search_tool"](search_filters=search_filters)
     
-    async def _fallback_to_search_interaction(self, user_input: str, session_state: Dict[str, Any]) -> Content:
-        """Fallback to original search interaction agent."""
-        content = Content(data={
-            "request_type": "search_interaction",
-            "user_input": user_input,
-            "session_state": session_state
-        })
-        return await self._handle_search_interaction(content)
+    # FIXED: Added session_id parameter
+    async def _fallback_to_search_interaction(self, user_input: str, session_state: Dict[str, Any], session_id: str = None) -> Content:
+        """ENHANCED: Fallback to original search interaction agent with better error handling."""
+        try:
+            if session_id:
+                step_logger.log_step("🔄 Using fallback search processing", "tool")
+            
+            content = Content(data={
+                "request_type": "search_interaction",
+                "user_input": user_input,
+                "session_state": session_state
+            })
+            
+            return await self._handle_search_interaction(content)
+            
+        except Exception as fallback_error:
+            if session_id:
+                step_logger.log_error(f"Fallback processing failed: {str(fallback_error)}")
+            
+            return Content(data={
+                "success": False,
+                "error": f"Processing failed: {str(fallback_error)}",
+                "message": "Sorry, I couldn't process that request. Please try rephrasing it."
+            })
     
     # Keep original methods for backward compatibility
     async def _handle_search_interaction(self, content: Content) -> Content:

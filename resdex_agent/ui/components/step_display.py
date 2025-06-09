@@ -1,6 +1,6 @@
-# resdex_agent/ui/components/step_display.py - FIXED for Streamlit threading
+# resdex_agent/ui/components/step_display.py - FIXED for LIVE step streaming
 """
-Real-time step display component - Fixed for Streamlit 1.12 threading limitations
+Real-time step display component - Fixed for live streaming in Streamlit 1.12
 """
 
 import streamlit as st
@@ -10,7 +10,7 @@ from ...utils.step_logger import step_logger
 
 
 class StepDisplay:
-    """Component for displaying real-time processing steps - Fixed for Streamlit threading."""
+    """Component for displaying LIVE streaming steps - Fixed for Streamlit 1.12"""
     
     def __init__(self):
         self.step_icons = {
@@ -39,48 +39,37 @@ class StepDisplay:
             "info": "#6c757d"
         }
     
-    def create_step_placeholder(self) -> Any:
-        """Create a placeholder for step updates."""
-        return st.empty()
-    
-    def show_processing_steps(self, session_id: str, placeholder, max_wait: int = 20):
+    def show_live_steps(self, session_id: str, placeholder, max_steps: int = 10):
         """
-        FIXED: Show steps using session state polling instead of threading.
-        This method should be called from the main Streamlit thread.
+        FIXED: Show ALL steps as they happen - LIVE STREAMING
         """
         try:
-            # Poll for steps from session state rather than using threads
-            if 'step_poll_count' not in st.session_state:
-                st.session_state.step_poll_count = 0
-            
-            # Get current steps
             current_steps = step_logger.get_steps(session_id)
             
             if current_steps:
-                # Update display with current steps
-                self._safe_update_step_display(placeholder, current_steps)
+                # Show ALL steps (not just latest) with live updates
+                self._render_live_steps_container(placeholder, current_steps, max_steps)
                 
                 # Check if processing is complete
                 if current_steps and current_steps[-1]["type"] in ["completion", "error"]:
-                    # Mark as complete
-                    st.session_state[f'steps_complete_{session_id}'] = True
-                    # Schedule cleanup after small delay
-                    st.session_state[f'steps_cleanup_time_{session_id}'] = time.time() + 2
                     return True
             
             return False
             
         except Exception as e:
-            print(f"❌ Step display error: {e}")
+            print(f"❌ Live step display error: {e}")
             return False
     
-    def _safe_update_step_display(self, placeholder, steps: List[Dict[str, Any]]):
-        """FIXED: Safely update step display without threading issues."""
+    def _render_live_steps_container(self, placeholder, steps: List[Dict[str, Any]], max_steps: int = 10):
+        """FIXED: Avoid nested columns error - use simple HTML structure"""
         if not steps:
             return
         
         try:
-            # Build simple HTML for steps (avoid complex animations in threading)
+            # Show recent steps (last N steps to avoid overwhelming UI)
+            display_steps = steps[-max_steps:] if len(steps) > max_steps else steps
+            
+            # Build HTML without nested columns
             steps_html = """
             <div style="
                 background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
@@ -88,131 +77,152 @@ class StepDisplay:
                 border-radius: 8px;
                 padding: 12px;
                 margin: 8px 0;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                max-height: 400px;
+                overflow-y: auto;
             ">
                 <div style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
                     font-weight: 600;
                     color: #495057;
-                    margin-bottom: 8px;
-                    font-size: 13px;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                ">🔄 AI Processing Steps</div>
+                    margin-bottom: 10px;
+                    font-size: 14px;
+                ">
+                    <span>🔄 AI Processing Steps</span>
+                    <span style="
+                        font-size: 10px;
+                        background: #28a745;
+                        color: white;
+                        padding: 2px 6px;
+                        border-radius: 8px;
+                        font-weight: bold;
+                    ">LIVE</span>
+                </div>
             """
             
-            # Show only last 5 steps to avoid overwhelming UI
-            recent_steps = steps[-5:] if len(steps) > 5 else steps
-            
-            for step in recent_steps:
+            # Add ALL accumulated steps
+            for i, step in enumerate(display_steps):
                 icon = self.step_icons.get(step["type"], "💡")
                 color = self.step_colors.get(step["type"], "#6c757d")
                 
-                step_html = f"""
+                # Different styling for latest step vs previous steps
+                is_latest = (i == len(display_steps) - 1)
+                
+                if is_latest:
+                    # Latest step - highlighted
+                    steps_html += f"""
+                    <div style="
+                        background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
+                        border-left: 4px solid {color};
+                        padding: 8px 12px;
+                        margin: 4px 0;
+                        border-radius: 4px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                    ">
+                        <div style="display: flex; align-items: center;">
+                            <span style="font-size: 14px; margin-right: 8px;">{icon}</span>
+                            <strong>{step['message']}</strong>
+                        </div>
+                        <span style="font-size: 10px; color: #666; font-family: monospace;">{step['timestamp']}</span>
+                    </div>
+                    """
+                else:
+                    # Previous steps - muted but visible
+                    steps_html += f"""
+                    <div style="
+                        background: #f8f9fa;
+                        border-left: 3px solid {color};
+                        padding: 6px 10px;
+                        margin: 2px 0;
+                        border-radius: 3px;
+                        opacity: 0.8;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                    ">
+                        <div style="display: flex; align-items: center;">
+                            <span style="font-size: 12px; margin-right: 6px;">{icon}</span>
+                            <span style="color: #666;">{step['message']}</span>
+                        </div>
+                        <span style="font-size: 9px; color: #999; font-family: monospace;">{step['timestamp']}</span>
+                    </div>
+                    """
+            
+            # Progress summary
+            if len(steps) > max_steps:
+                steps_html += f"""
                 <div style="
-                    display: flex;
-                    align-items: center;
-                    margin: 4px 0;
-                    padding: 6px 10px;
-                    background: white;
-                    border-radius: 4px;
-                    border-left: 3px solid {color};
-                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                    text-align: center;
+                    margin-top: 8px;
+                    font-size: 11px;
+                    color: #6c757d;
+                    font-style: italic;
                 ">
-                    <span style="font-size: 14px; margin-right: 8px;">{icon}</span>
-                    <span style="color: #343a40; font-size: 12px; flex-grow: 1;">{step['message']}</span>
-                    <span style="color: #6c757d; font-size: 10px; margin-left: 8px;">{step['timestamp']}</span>
+                    📊 Showing latest {max_steps} of {len(steps)} total steps
                 </div>
                 """
-                steps_html += step_html
+            else:
+                steps_html += f"""
+                <div style="
+                    text-align: center;
+                    margin-top: 8px;
+                    font-size: 11px;
+                    color: #6c757d;
+                    font-style: italic;
+                ">
+                    📊 {len(steps)} processing steps
+                </div>
+                """
             
             steps_html += "</div>"
             
-            # FIXED: Use markdown instead of direct DOM manipulation
+            # Update placeholder with ALL steps using HTML
             placeholder.markdown(steps_html, unsafe_allow_html=True)
             
         except Exception as e:
-            print(f"❌ Error updating step display: {e}")
-            # Fallback to simple text display
+            print(f"❌ Error rendering live steps: {e}")
+            # Simple fallback
             try:
-                simple_text = f"🔄 Processing... ({len(steps)} steps completed)"
-                placeholder.text(simple_text)
+                if steps:
+                    latest_step = steps[-1]
+                    placeholder.markdown(f"🔄 **Step {len(steps)}:** {latest_step['message']}")
             except:
-                pass  # Silent fail if even simple text fails
-    
-    def cleanup_completed_steps(self, session_id: str, placeholder):
-        """Clean up completed step displays."""
-        try:
-            cleanup_time_key = f'steps_cleanup_time_{session_id}'
-            complete_key = f'steps_complete_{session_id}'
-            
-            if (complete_key in st.session_state and 
-                cleanup_time_key in st.session_state and 
-                time.time() >= st.session_state[cleanup_time_key]):
-                
-                # Clear the display
-                placeholder.empty()
-                
-                # Clean up session state
-                if complete_key in st.session_state:
-                    del st.session_state[complete_key]
-                if cleanup_time_key in st.session_state:
-                    del st.session_state[cleanup_time_key]
-                    
-                return True
-            return False
-        except Exception as e:
-            print(f"❌ Cleanup error: {e}")
-            return False
-    
-    def clear_display(self, placeholder_key: str = "step_display"):
-        """Clear the step display."""
-        try:
-            if f"{placeholder_key}_container" in st.session_state:
-                st.session_state[f"{placeholder_key}_container"].empty()
-                del st.session_state[f"{placeholder_key}_container"]
-        except Exception as e:
-            print(f"❌ Clear display error: {e}")
-    
-    def render_static_steps(self, steps: List[Dict[str, Any]]):
-        """Render steps in a static container (for completed processes)."""
-        if not steps:
-            return
-        
-        try:
-            with st.container():
-                st.markdown("### 🔄 Processing Steps")
-                
-                for step in steps:
-                    icon = self.step_icons.get(step["type"], "💡")
-                    col1, col2, col3 = st.columns([1, 10, 2])
-                    with col1:
-                        st.markdown(f"<span style='font-size: 16px;'>{icon}</span>", unsafe_allow_html=True)
-                    with col2:
-                        st.markdown(f"<span style='color: #495057; font-weight: 500;'>{step['message']}</span>", unsafe_allow_html=True)
-                    with col3:
-                        st.markdown(f"<small style='color: #6c757d;'>{step['timestamp']}</small>", unsafe_allow_html=True)
-        except Exception as e:
-            print(f"❌ Static steps render error: {e}")
+                placeholder.markdown("🔄 **Processing...**")
 
 
-# FIXED: Simplified step display functions for immediate use
-def show_simple_steps(session_id: str, placeholder):
-    """Show steps using simple polling approach."""
-    try:
-        steps = step_logger.get_steps(session_id)
-        if steps:
-            # Simple text display
-            step_text = f"🔄 **AI Processing:** {steps[-1]['message']}"
-            placeholder.markdown(step_text)
+# FIXED: Simplified step polling for real-time updates
+def poll_and_update_steps(session_id: str, placeholder, max_polls: int = 50):
+    """
+    FIXED: Poll for steps and update display - works with Streamlit 1.12
+    """
+    step_display = StepDisplay()
+    
+    for poll_count in range(max_polls):
+        try:
+            # Get current steps
+            current_steps = step_logger.get_steps(session_id)
             
-            # Check if complete
-            if steps[-1]["type"] in ["completion", "error"]:
-                # Clear after delay
-                time.sleep(1)
-                placeholder.empty()
-                return True
-        return False
-    except Exception as e:
-        print(f"❌ Simple steps error: {e}")
-        return False
+            if current_steps:
+                # Update display with ALL steps
+                step_display._render_live_steps_container(placeholder, current_steps)
+                
+                # Check if complete
+                if current_steps[-1]["type"] in ["completion", "error"]:
+                    # Keep final display for a moment
+                    time.sleep(2)
+                    return True
+            
+            # Small delay between polls
+            time.sleep(0.1)
+            
+        except Exception as e:
+            print(f"❌ Step polling error: {e}")
+            break
+    
+    return False

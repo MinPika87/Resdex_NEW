@@ -1,6 +1,6 @@
-# resdex_agent/ui/streamlit_app.py - FIXED to avoid threading issues
+# resdex_agent/ui/streamlit_app.py - FIXED for LIVE step streaming during search
 """
-Streamlit application for ResDex Agent - FIXED for threading compatibility
+Streamlit application for ResDex Agent - FIXED for live step streaming
 """
 
 import streamlit as st
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class StreamlitApp:
     """
-    FIXED Streamlit application interface for ResDex Agent (no threading issues).
+    FIXED Streamlit application with LIVE step streaming for all operations.
     """
     
     def __init__(self):
@@ -41,7 +41,7 @@ class StreamlitApp:
         """Main application entry point."""
         # Page configuration
         st.set_page_config(
-            page_title="ResDex AI Agent - Enhanced",
+            page_title="ResDex AI Agent",
             layout="wide"
         )
         
@@ -95,15 +95,12 @@ class StreamlitApp:
         self.chat_interface = ChatInterface(st.session_state, self.root_agent)
     
     def _render_header(self):
-        """FIXED: Render application header with simple step logging demo."""
-        st.title("🔍 ResDex AI Agent - Enhanced")
-        st.markdown("*Real-time AI processing with step-by-step insights*")
-        
-        # Agent status indicator with SIMPLE step logging demo
-        with st.expander("🤖 Agent Status & Step Logging Demo", expanded=False):
-            col1, col2 = st.columns(2)
+            """FIXED: Render application header with simple agent status."""
+            st.title("🔍 ResDex AI Agent - Enhanced")
+            st.markdown("*Real-time AI processing with step-by-step insights*")
             
-            with col1:
+            # Simple agent status indicator
+            with st.expander("🤖 Agent Status", expanded=False):
                 if st.button("Check Agent Health"):
                     health_status = asyncio.run(self._check_agent_health())
                     if health_status["success"]:
@@ -112,49 +109,6 @@ class StreamlitApp:
                     else:
                         st.error("❌ System issues detected")
                         st.json(health_status)
-            
-            with col2:
-                if st.button("Demo Step Logging"):
-                    self._demo_step_logging_simple()
-    
-    def _demo_step_logging_simple(self):
-        """FIXED: Simple step logging demo without threading."""
-        session_id = str(uuid.uuid4())
-        
-        # Create a simple placeholder
-        demo_placeholder = st.empty()
-        
-        # Start demo steps
-        step_logger.start_session(session_id)
-        step_logger.log_step("🔍 Demo: Analyzing query", "routing")
-        demo_placeholder.markdown("🔄 **Demo:** Analyzing query...")
-        time.sleep(0.5)
-        
-        step_logger.log_step("➡️ Demo: Route determined", "decision")
-        demo_placeholder.markdown("🔄 **Demo:** Route determined...")
-        time.sleep(0.5)
-        
-        step_logger.log_step("🔧 Demo: Tool activated", "tool")
-        demo_placeholder.markdown("🔄 **Demo:** Tool activated...")
-        time.sleep(0.5)
-        
-        step_logger.log_step("🤖 Demo: LLM processing", "llm")
-        demo_placeholder.markdown("🔄 **Demo:** LLM processing...")
-        time.sleep(0.5)
-        
-        step_logger.log_completion("Demo completed")
-        demo_placeholder.markdown("🎯 **Demo:** Completed!")
-        time.sleep(1)
-        
-        # Clear display
-        demo_placeholder.empty()
-        
-        # Show final steps in expander
-        with st.expander("📋 Demo Steps Completed", expanded=True):
-            steps = step_logger.get_steps(session_id)
-            for step in steps:
-                icon = "🔍" if step["type"] == "routing" else "➡️" if step["type"] == "decision" else "🔧" if step["type"] == "tool" else "🤖" if step["type"] == "llm" else "🎯"
-                st.markdown(f"{icon} {step['message']} *({step['timestamp']})*")
     
     def _render_main_content(self):
         """Render main content area."""
@@ -191,7 +145,7 @@ class StreamlitApp:
                 st.markdown("**Search**")
                 search_button = self.search_form.render_search_controls()
                 if search_button:
-                    asyncio.run(self._handle_search_request_fixed())
+                    asyncio.run(self._handle_search_request_with_live_steps())
         
         # Results section
         st.markdown("---")
@@ -278,8 +232,8 @@ class StreamlitApp:
         else:
             st.info("📝 Configure search criteria")
     
-    async def _handle_search_request_fixed(self):
-        """ENHANCED: Handle search request with REAL step display from step_logger."""
+    async def _handle_search_request_with_live_steps(self):
+        """SIMPLIFIED: Handle search request WITHOUT live steps - direct results only."""
         try:
             # Validate search form
             validation_errors = self.search_form.validate_form()
@@ -288,22 +242,6 @@ class StreamlitApp:
                 for error in validation_errors:
                     st.error(error)
                 return
-            
-            # Create session ID and step display
-            session_id = str(uuid.uuid4())
-            step_placeholder = st.empty()
-            
-            # Start step logging and show REAL steps
-            step_logger.start_session(session_id)
-            
-            def update_search_steps():
-                """Update search steps in real-time - ONE AT A TIME."""
-                current_steps = step_logger.get_steps(session_id)
-                if current_steps:
-                    latest_step = current_steps[-1]
-                    icon = self.step_display.step_icons.get(latest_step["type"], "💡")
-                    # Show ONLY the latest step
-                    step_placeholder.markdown(f"**{icon} {latest_step['message']}**")
             
             # Build search filters
             search_filters = {
@@ -318,95 +256,70 @@ class StreamlitApp:
                 'max_candidates': 100
             }
             
-            step_logger.log_search_execution(search_filters)
-            update_search_steps()
-            
-            # Execute search
-            content = Content(data={
-                "request_type": "candidate_search",
-                "search_filters": search_filters,
-                "session_id": session_id
-            })
-            
-            step_logger.log_step("📡 Calling ResDex API", "search")
-            update_search_steps()
-            
-            result = await self.root_agent.execute(content)
-            
-            if result.data["success"]:
-                all_candidates = result.data["candidates"]
-                total_results = result.data["total_count"]
+            # Show simple loading message
+            with st.spinner("🔍 Searching candidates..."):
                 
-                step_logger.log_results(len(all_candidates), total_results)
-                update_search_steps()
+                # Execute search
+                from resdex_agent.agent import Content
+                content = Content(data={
+                    "request_type": "candidate_search",
+                    "search_filters": search_filters
+                })
                 
-                step_logger.log_step("💾 Storing search results", "system")
-                update_search_steps()
+                result = await self.root_agent.execute(content)
                 
-                # Store results
-                st.session_state['all_candidates'] = all_candidates
-                st.session_state['displayed_candidates'] = all_candidates[:20]
-                st.session_state['display_batch_size'] = 20
-                st.session_state['candidates'] = all_candidates[:20]
-                st.session_state['total_results'] = total_results
-                st.session_state['search_applied'] = True
-                st.session_state['selected_keywords'] = st.session_state['keywords'].copy()
-                st.session_state['page'] = 0
-                
-                # Clear chat history for new search
-                st.session_state['chat_history'] = []
-                
-                step_logger.log_completion("Search completed successfully")
-                update_search_steps()
-                
-                if all_candidates:
-                    # Create search summary
-                    current_request = self._build_current_request_object()
-                    search_summary = self._create_search_summary(current_request, result.data)
+                if result.data["success"]:
+                    all_candidates = result.data["candidates"]
+                    total_results = result.data["total_count"]
                     
-                    welcome_msg = f"🎉 Search completed! Found {total_results:,} total matches.\n\n{search_summary}\n\nShowing top candidates with 5 per page. Ask me to 'show more candidates' to see additional results!"
+                    # Store results
+                    st.session_state['all_candidates'] = all_candidates
+                    st.session_state['displayed_candidates'] = all_candidates[:20]
+                    st.session_state['display_batch_size'] = 20
+                    st.session_state['candidates'] = all_candidates[:20]
+                    st.session_state['total_results'] = total_results
+                    st.session_state['search_applied'] = True
+                    st.session_state['selected_keywords'] = st.session_state['keywords'].copy()
+                    st.session_state['page'] = 0
                     
-                    st.session_state['chat_history'].append({
-                        "role": "assistant",
-                        "content": welcome_msg
-                    })
+                    # Clear chat history for new search
+                    st.session_state['chat_history'] = []
                     
-                    st.session_state['last_search_request'] = current_request
-                
-                fetched_count = len(all_candidates)
-                displayed_count = len(st.session_state['displayed_candidates'])
-                
-                # Show final message briefly then clear
-                step_placeholder.markdown("🎯 **Search completed successfully!**")
-                time.sleep(1)
-                
-                # Clear step display and show success
-                step_placeholder.empty()
-                st.success(f"✅ Found {total_results:,} total matches. Fetched {fetched_count} candidates, displaying first {displayed_count}.")
-                
-                st.session_state['agent_debug_info'] = result.data.get("root_agent", {})
-                
-            else:
-                step_logger.log_error(f"Search failed: {result.data.get('error', 'Unknown error')}")
-                update_search_steps()
-                time.sleep(1)
-                step_placeholder.empty()
-                st.error(f"❌ Search failed: {result.data.get('error', 'Unknown error')}")
-                if 'details' in result.data:
-                    st.error(f"Details: {result.data['details']}")
+                    if all_candidates:
+                        # Create search summary
+                        current_request = self._build_current_request_object()
+                        search_summary = self._create_search_summary(current_request, result.data)
+                        
+                        welcome_msg = f"🎉 Search completed! Found {total_results:,} total matches.\n\n{search_summary}\n\nShowing top candidates with 5 per page. Ask me to 'show more candidates' to see additional results!"
+                        
+                        st.session_state['chat_history'].append({
+                            "role": "assistant",
+                            "content": welcome_msg
+                        })
+                        
+                        st.session_state['last_search_request'] = current_request
+                    
+                    fetched_count = len(all_candidates)
+                    displayed_count = len(st.session_state['displayed_candidates'])
+                    
+                    # Simple success message
+                    st.success(f"✅ Found {total_results:,} matches, displaying {displayed_count} candidates.")
+                    
+                    st.session_state['agent_debug_info'] = result.data.get("root_agent", {})
+                    
+                else:
+                    # Handle search failure
+                    st.error(f"❌ Search failed: {result.data.get('error', 'Unknown error')}")
+                    if 'details' in result.data:
+                        st.error(f"Details: {result.data['details']}")
             
             # Use experimental_rerun for Streamlit 1.12
             st.experimental_rerun()
             
         except Exception as e:
-            if 'session_id' in locals():
-                step_logger.log_error(f"Search request failed: {str(e)}")
             logger.error(f"Search request failed: {e}")
             st.error(f"❌ An unexpected error occurred: {str(e)}")
     
-    # REMOVED: No longer needed since we're not showing HTML summaries
-    # def _display_search_step_summary(self, placeholder, steps):
-
     def _create_search_summary(self, request_object: dict, search_result: dict) -> str:
         """Create a human-readable search summary."""
         keywords = st.session_state.get('keywords', [])
@@ -503,13 +416,29 @@ class StreamlitApp:
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         header {visibility: hidden;}
+        
+        /* Animation for live steps */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .step-container {
+            animation: fadeInUp 0.3s ease-out;
+        }
         </style>
         """
 
 
 # Main entry point
 def main():
-    """Main entry point for the FIXED Streamlit app."""
+    """Main entry point for the FIXED Streamlit app with live step streaming."""
     app = StreamlitApp()
     app.run()
 
