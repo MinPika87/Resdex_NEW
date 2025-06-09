@@ -359,7 +359,7 @@ Show your appreciation to those who have contributed to the project.
 
 ---
 ## License
-For open source projects, say how it is licensed.
+For open source projects, say how it is licensed
 
 **Built using Google ADK patterns for enterprise-grade AI agent development.**
 ## Project status
