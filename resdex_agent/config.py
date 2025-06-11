@@ -13,7 +13,7 @@ load_dotenv()
 
 class DatabaseConfig(BaseModel):
     """Database connection configuration."""
-    host: str = Field(default_factory=lambda: os.getenv("DB_HOST", "172.10.112.103:3306"))
+    host: str = Field(default_factory=lambda: os.getenv("DB_HOST", "172.10.112.169:3306"))
     user: str = Field(default_factory=lambda: os.getenv("DB_USER", "user_analytics"))
     password: str = Field(default_factory=lambda: os.getenv("DB_PASSWORD", "anaKm7Iv80l"))
     database: str = Field(default_factory=lambda: os.getenv("DB_NAME", "ja_LSI"))
@@ -32,7 +32,7 @@ class APIConfig(BaseModel):
     """External API configuration."""
     search_api_url: str = Field(default_factory=lambda: os.getenv("SEARCH_API_URL", "http://staging1-ni-resdexsearch-exp-services.restapis.services.resdex.com/naukri-resdexsearch-simulator-services/v1/search/doSearch?source=es8"))
     user_details_api_url: str = Field(default_factory=lambda: os.getenv("USER_DETAILS_API_URL", "http://staging1-search-data-services.restapis.services.resdex.com/search-data-simulator-services/v0/search/profile/getDetails"))
-    location_api_url: str = Field(default_factory=lambda: os.getenv("LOCATION_API_URL", "http://test.taxonomy.services.analytics.resdx.com/taxonomy-other-entities-service/v0/locationNormalization"))
+    location_api_url: str = Field(default_factory=lambda: os.getenv("LOCATION_API_URL", "http://test.taxonomy.services.analytics.resdex.com/taxonomy-other-entities-service/v0/locationNormalization"))
 
 
 class AgentConfig(BaseModel):
