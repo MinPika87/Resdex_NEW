@@ -53,45 +53,59 @@ class LocationAnalysisTool(Tool):
             logger.error(f"Location analysis failed: {e}")
             return {"success": False, "error": str(e)}
     
+    # Replace the _find_similar_locations method in LocationAnalysisTool:
+
     async def _find_similar_locations(self, base_location: str, criteria: Optional[str] = None) -> Dict[str, Any]:
-        """Find locations similar to the base location using Qwen LLM."""
+        """Find locations similar to the base location using enhanced LLM analysis."""
         
-        prompt = f"""You are a location analysis expert for India. Find cities similar to {base_location} for job candidate search.
+        # Enhanced prompt with better context and examples
+        prompt = f"""You are a location analysis expert for Indian job markets. Find cities similar to {base_location} for candidate search.
 
-Base Location: {base_location}
-Analysis Criteria: {criteria or "economic similarity, job market, tech industry presence, cost of living"}
+    Base Location: {base_location}
+    Analysis Criteria: {criteria or "economic similarity, job market, tech industry presence, cost of living"}
 
-Consider these factors:
-1. Economic development level
-2. Tech industry presence  
-3. Job market size
-4. Cost of living
-5. Infrastructure quality
-6. Educational institutions
-7. Transportation connectivity
+    CONTEXT: This is for a job recruitment platform. Users want to expand their candidate search to similar cities that would have comparable talent pools.
 
-INDIAN CITIES DATABASE (for reference):
-Tier 1: Mumbai, Delhi, Bangalore, Hyderabad, Chennai, Kolkata, Pune, Ahmedabad
-Tier 2: Jaipur, Surat, Lucknow, Kanpur, Nagpur, Indore, Thane, Bhopal, Visakhapatnam, Vadodara
-Tier 3: Agra, Nashik, Faridabad, Meerut, Rajkot, Varanasi, Amritsar, Allahabad, Ranchi, Coimbatore
+    Consider these factors in priority order:
+    1. Tech industry presence and job market size
+    2. Economic development level and opportunities  
+    3. Educational institutions (IITs, NITs, tech colleges)
+    4. Transportation connectivity and accessibility
+    5. Cost of living and salary expectations
+    6. Infrastructure quality for businesses
 
-Task: Find 4-6 cities most similar to {base_location} for tech job candidates.
+    COMPREHENSIVE INDIAN CITIES DATABASE:
+    **Tier 1 (Major Tech Hubs):** Mumbai, Delhi, Bangalore, Hyderabad, Chennai, Kolkata, Pune
+    **Tier 1.5 (Emerging Tech):** Ahmedabad, Kochi, Coimbatore, Indore, Jaipur
+    **Tier 2 (Growing Markets):** Surat, Lucknow, Kanpur, Nagpur, Bhopal, Visakhapatnam, Vadodara
+    **Tier 3 (Developing):** Agra, Nashik, Faridabad, Meerut, Rajkot, Varanasi, Amritsar
+    **Satellite Cities:** Gurgaon, Noida, Thane, Navi Mumbai, Greater Noida, Ghaziabad
+    **South Tech Corridor:** Bangalore, Chennai, Hyderabad, Kochi, Coimbatore, Mysore
+    **West Corridor:** Mumbai, Pune, Ahmedabad, Surat, Nashik, Vadodara
+    **North Corridor:** Delhi, Noida, Gurgaon, Jaipur, Chandigarh, Lucknow
 
-Response format (JSON only):
-{{
-    "base_location": "{base_location}",
-    "similar_locations": ["City1", "City2", "City3", "City4"],
-    "reasoning": {{
-        "City1": "brief reason why similar",
-        "City2": "brief reason why similar", 
-        "City3": "brief reason why similar",
-        "City4": "brief reason why similar"
-    }},
-    "similarity_score": 0.0-1.0,
-    "analysis_factors": ["factor1", "factor2", "factor3"]
-}}
+    EXAMPLES OF GOOD MATCHES:
+    - Noida → Delhi, Gurgaon, Greater Noida (NCR region, similar tech focus)
+    - Bangalore → Hyderabad, Chennai, Pune (major tech hubs with similar talent)
+    - Mumbai → Pune, Thane, Ahmedabad (western corridor, financial/tech centers)
 
-Return ONLY the JSON response."""
+    Task: Find 4-6 cities most similar to {base_location} that would have comparable candidate pools for tech recruitment.
+
+    CRITICAL: Return ONLY valid JSON. No explanations, no extra text.
+
+    Response format:
+    {{
+        "base_location": "{base_location}",
+        "similar_locations": ["City1", "City2", "City3", "City4"],
+        "reasoning": {{
+            "City1": "specific reason why similar (max 20 words)",
+            "City2": "specific reason why similar (max 20 words)",
+            "City3": "specific reason why similar (max 20 words)",
+            "City4": "specific reason why similar (max 20 words)"
+        }},
+        "similarity_score": 0.85,
+        "analysis_factors": ["tech_industry", "job_market_size", "educational_institutions", "economic_level"]
+    }}"""
 
         try:
             llm_result = await self.llm_tool._call_llm_direct(prompt, task="location_analysis")
@@ -114,78 +128,134 @@ Return ONLY the JSON response."""
                         "reasoning": reasoning,
                         "similarity_score": location_data.get("similarity_score", 0.8),
                         "analysis_factors": location_data.get("analysis_factors", []),
-                        "method": "llm_analysis",
+                        "method": "enhanced_llm_analysis",
                         "message": f"Found {len(similar_locations)} similar locations using AI analysis"
                     }
                 else:
-                    # Fallback to curated mapping
+                    print("⚠️ LLM returned invalid location data, using fallback")
                     return await self._fallback_location_mapping(base_location)
             else:
-                # Fallback to curated mapping
+                print("⚠️ LLM analysis failed, using fallback")
                 return await self._fallback_location_mapping(base_location)
                 
         except Exception as e:
-            logger.error(f"LLM location analysis failed: {e}")
+            logger.error(f"Enhanced LLM location analysis failed: {e}")
             return await self._fallback_location_mapping(base_location)
     
-    async def _find_nearby_locations(self, base_location: str, radius_km: Optional[int] = None) -> Dict[str, Any]:
-        """Find locations within specified radius using Qwen LLM."""
-        
+    # In LocationAnalysisTool._find_nearby_locations method, fix the LLM call:
+
+    async def _find_nearby_locations(self, base_location: str, radius_km: Optional[int] = None) -> Dict[str, Any]:    
         radius = radius_km or 200  # Default 200km radius
         
         prompt = f"""You are a geography expert for India. Find cities within approximately {radius} km of {base_location}.
 
-Base Location: {base_location}
-Search Radius: {radius} km
+    Base Location: {base_location}
+    Search Radius: {radius} km
 
-Consider:
-1. Actual geographical distance
-2. Transportation connectivity (road/rail)
-3. Economic connectivity
-4. Commute feasibility for professionals
+    Consider:
+    1. Actual geographical distance
+    2. Transportation connectivity (road/rail)
+    3. Economic connectivity
+    4. Commute feasibility for professionals
 
-Task: Find cities within {radius} km radius that are relevant for job search.
+    Task: Find cities within {radius} km radius that are relevant for job search.
 
-Response format (JSON only):
-{{
-    "base_location": "{base_location}",
-    "radius_km": {radius},
-    "nearby_locations": [
-        {{"city": "City1", "distance_km": 50, "connectivity": "excellent"}},
-        {{"city": "City2", "distance_km": 120, "connectivity": "good"}},
-        {{"city": "City3", "distance_km": 180, "connectivity": "moderate"}}
-    ],
-    "total_found": 3
-}}
+    CRITICAL: Return ONLY valid JSON. No explanations, no extra text, no <think> tags.
 
-Return ONLY the JSON response."""
+    Response format (JSON only):
+    {{
+        "base_location": "{base_location}",
+        "radius_km": {radius},
+        "nearby_locations": [
+            {{"city": "City1", "distance_km": 50, "connectivity": "excellent"}},
+            {{"city": "City2", "distance_km": 120, "connectivity": "good"}},
+            {{"city": "City3", "distance_km": 180, "connectivity": "moderate"}}
+        ],
+        "total_found": 3
+    }}"""
 
         try:
-            llm_result = await self.llm_tool._call_llm_direct(prompt, task="nearby_location_analysis")
+            llm_result = await self.llm_tool._call_llm_direct(prompt, task="location_analysis")
+            
+            print(f"🔍 LLM RESULT: {llm_result}")
             
             if llm_result["success"]:
                 location_data = llm_result.get("parsed_response")
                 
-                if location_data and "nearby_locations" in location_data:
-                    nearby_locations = [loc["city"] for loc in location_data["nearby_locations"]]
+                # ✅ FIX 1: Try multiple parsing methods
+                if not location_data and "response_text" in llm_result:
+                    try:
+                        import json
+                        response_text = llm_result["response_text"].strip()
+                        
+                        # Handle case where response_text contains just the array part
+                        if response_text.startswith('[') and response_text.endswith(']'):
+                            # LLM returned just the nearby_locations array
+                            nearby_array = json.loads(response_text)
+                            location_data = {
+                                "base_location": base_location,
+                                "nearby_locations": nearby_array,
+                                "total_found": len(nearby_array)
+                            }
+                            print(f"🔧 PARSED ARRAY FORMAT: {len(nearby_array)} cities")
+                        else:
+                            # Try parsing as full object
+                            location_data = json.loads(response_text)
+                            print(f"🔧 PARSED OBJECT FORMAT: {location_data}")
+                            
+                    except json.JSONDecodeError as e:
+                        print(f"❌ Manual JSON parse failed: {e}")
+                        location_data = None
+                
+                # ✅ FIX 2: Enhanced validation logic
+                nearby_locations = []
+                
+                if location_data:
+                    print(f"🔍 VALIDATING LOCATION DATA: {location_data}")
                     
-                    print(f"🎯 LLM FOUND NEARBY LOCATIONS: {nearby_locations}")
+                    # Check for nearby_locations field
+                    if "nearby_locations" in location_data and isinstance(location_data["nearby_locations"], list):
+                        nearby_data = location_data["nearby_locations"]
+                        
+                        for loc in nearby_data:
+                            if isinstance(loc, dict) and "city" in loc:
+                                nearby_locations.append(loc["city"])
+                            elif isinstance(loc, str):
+                                nearby_locations.append(loc)
+                        
+                        print(f"🎯 EXTRACTED {len(nearby_locations)} CITIES: {nearby_locations}")
                     
-                    return {
-                        "success": True,
-                        "base_location": base_location,
-                        "nearby_locations": nearby_locations,
-                        "detailed_locations": location_data["nearby_locations"],
-                        "radius_km": radius,
-                        "method": "llm_geographical_analysis",
-                        "message": f"Found {len(nearby_locations)} locations within {radius}km"
-                    }
-                    
+                    # ✅ FIX 3: Check if we got valid cities
+                    if len(nearby_locations) > 0:
+                        print(f"✅ VALIDATION SUCCESS: Found {len(nearby_locations)} cities")
+                        
+                        return {
+                            "success": True,
+                            "base_location": base_location,
+                            "nearby_locations": nearby_locations,
+                            "detailed_locations": location_data.get("nearby_locations", []),
+                            "radius_km": radius,
+                            "method": "enhanced_llm_geographical_analysis",
+                            "message": f"Found {len(nearby_locations)} locations within {radius}km",
+                            "raw_data": location_data  # For debugging
+                        }
+                    else:
+                        print(f"❌ VALIDATION FAILED: No valid cities extracted from {location_data}")
+                else:
+                    print("❌ No valid location_data after all parsing attempts")
+            else:
+                print(f"❌ LLM call failed: {llm_result}")
+            
+            # Fallback
+            print("⚠️ Using fallback mapping")
+            return await self._fallback_nearby_mapping(base_location, radius)
+                        
         except Exception as e:
             logger.error(f"Nearby location analysis failed: {e}")
-        
-        # Fallback for nearby locations
-        return await self._fallback_nearby_mapping(base_location, radius)
+            print(f"❌ Location analysis exception: {e}")
+            import traceback
+            traceback.print_exc()
+            return await self._fallback_nearby_mapping(base_location, radius)
     
     async def _find_metro_area_locations(self, base_location: str) -> Dict[str, Any]:
         """Find metropolitan area locations using Qwen LLM."""
@@ -372,7 +442,6 @@ Return ONLY the JSON response."""
         }
         
         nearby_locations = nearby_mapping.get(base_location, [base_location])
-        
         return {
             "success": True,
             "base_location": base_location,

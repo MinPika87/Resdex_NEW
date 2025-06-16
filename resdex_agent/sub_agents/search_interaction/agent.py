@@ -86,11 +86,16 @@ class SearchInteractionAgent:
             print(f"🚀 SEARCH AGENT: Processing '{user_input}'")
             print(f"🔧 Request type: {request_type}")
             
+            # NEW: Check for location expansion requests FIRST
+            location_info = self._requires_location_expansion(user_input)
+            if location_info["requires_expansion"]:
+                print(f"🗺️ LOCATION EXPANSION DETECTED: {location_info}")
+                return await self._handle_location_expansion_request(user_input, session_state)
+            
+            # Continue with existing logic for other requests...
             if request_type == "enhanced_search_interaction":
-                # NEW: Handle complex task breakdown and orchestration
                 return await self._handle_enhanced_interaction(user_input, session_state, content.data)
             else:
-                # ORIGINAL: Handle simple intent extraction  
                 return await self._handle_simple_interaction(user_input, session_state)
                 
         except Exception as e:
@@ -194,6 +199,238 @@ class SearchInteractionAgent:
             logger.error(f"Complex task breakdown failed: {e}")
             # Fallback to simple processing
             return await self._handle_simple_interaction(user_input, session_state)
+    def _requires_location_expansion(self, user_input: str) -> Dict[str, Any]:
+        """Detect if user input requires location expansion using location tools."""
+        location_expansion_patterns = [
+            "nearby locations", "nearby cities", "similar locations", "similar cities",
+            "tech hubs", "tech cities", "technology hubs", "IT hubs", "IT cities",
+            "metro area", "metropolitan", "surrounding", "around", "close to",
+            "big cities", "major cities", "industrial cities", "commercial hubs"
+        ]
+        
+        base_location_keywords = [
+            "Mumbai", "Delhi", "Bangalore", "Chennai", "Hyderabad", "Pune", "Kolkata",
+            "Noida", "Gurgaon", "Ahmedabad", "Jaipur", "Kochi", "Indore"
+        ]
+        
+        input_lower = user_input.lower()
+        
+        # Check for expansion patterns
+        has_expansion_pattern = any(pattern in input_lower for pattern in location_expansion_patterns)
+        
+        # Extract base location
+        base_location = None
+        for location in base_location_keywords:
+            if location.lower() in input_lower:
+                base_location = location
+                break
+        
+        # Determine analysis type
+        analysis_type = "similar"
+        if "nearby" in input_lower or "close to" in input_lower or "surrounding" in input_lower:
+            analysis_type = "nearby"
+        elif "tech hub" in input_lower or "it hub" in input_lower or "technology" in input_lower:
+            analysis_type = "industry_hubs"
+        elif "metro" in input_lower or "metropolitan" in input_lower:
+            analysis_type = "metro_area"
+        
+        return {
+            "requires_expansion": has_expansion_pattern,
+            "base_location": base_location,
+            "analysis_type": analysis_type,
+            "patterns_found": [p for p in location_expansion_patterns if p in input_lower]
+        }
+    async def _handle_location_expansion_request(self, user_input: str, session_state: Dict[str, Any]) -> object:
+        try:
+            location_info = self._requires_location_expansion(user_input)
+            
+            if not location_info["requires_expansion"]:
+                return await self._handle_simple_interaction(user_input, session_state)
+            
+            base_location = location_info["base_location"]
+            analysis_type = location_info["analysis_type"]
+            
+            print(f"🗺️ AGENTIC LOCATION EXPANSION: {analysis_type} for {base_location}")
+            
+            if not base_location:
+                # Try to extract from current cities in session
+                current_cities = session_state.get('current_cities', [])
+                preferred_cities = session_state.get('preferred_cities', [])
+                if current_cities:
+                    base_location = current_cities[0]
+                elif preferred_cities:
+                    base_location = preferred_cities[0]
+                else:
+                    return self._create_content({
+                        "success": False,
+                        "error": "Please specify a base location for expansion",
+                        "message": "I need a base city to find nearby locations. For example: 'add nearby locations to Mumbai'"
+                    })
+            
+            # STEP 1: Use Location Tool to Find Cities
+            print(f"🔧 STEP 1: Using LocationTool to find {analysis_type} cities for {base_location}")
+            
+            if self.tools["location_tool"]:
+                location_result = await self.tools["location_tool"](
+                    base_location=base_location,
+                    analysis_type=analysis_type,
+                    criteria="job market and tech industry"
+                )
+                
+                print(f"🔍 LOCATION TOOL RESULT: {location_result}")
+                
+                if location_result["success"]:
+                    discovered_locations = []
+                    
+                    if analysis_type == "nearby":
+                        if "nearby_locations" in location_result:
+                            nearby_data = location_result["nearby_locations"]
+                            if isinstance(nearby_data, list) and len(nearby_data) > 0:
+                                if isinstance(nearby_data[0], dict) and "city" in nearby_data[0]:
+                                    discovered_locations = [loc["city"] for loc in nearby_data]
+                                else:
+                                    discovered_locations = nearby_data
+                    
+                    elif analysis_type == "similar":
+                        discovered_locations = location_result.get("similar_locations", [])
+                    elif analysis_type == "industry_hubs":
+                        discovered_locations = location_result.get("industry_hubs", [])
+                    elif analysis_type == "metro_area":
+                        discovered_locations = location_result.get("metro_area_locations", [])
+                    
+                    print(f"🎯 STEP 1 RESULT: Discovered {len(discovered_locations)} locations: {discovered_locations}")
+                    #Step 2 use the filter tool
+                    print(f"🔧 STEP 2: Using FilterTool to add {len(discovered_locations)} locations")
+                    
+                    all_modifications = []
+                    
+                    # Add base location first if not already present
+                    if base_location not in session_state.get('current_cities', []):
+                        print(f"🔧 STEP 2.1: Adding base location: {base_location}")
+                        filter_result = await self.tools["filter_tool"](
+                            "add_location", 
+                            session_state, 
+                            location=base_location,
+                            mandatory=False
+                        )
+                        if filter_result["success"]:
+                            all_modifications.extend(filter_result["modifications"])
+                            print(f"✅ Added base location: {base_location}")
+                        else:
+                            print(f"❌ Failed to add base location: {filter_result.get('error')}")
+                    
+                    # Add each discovered location using FilterTool
+                    x = len(discovered_locations)
+                    for i, location in enumerate(discovered_locations[:x], 1): 
+                        if location != base_location and location not in session_state.get('current_cities', []):
+                            print(f"🔧 STEP 2.{i+1}: Adding nearby location: {location}")
+                            
+                            filter_result = await self.tools["filter_tool"](
+                                "add_location", 
+                                session_state, 
+                                location=location,
+                                mandatory=False
+                            )
+                            
+                            if filter_result["success"]:
+                                all_modifications.extend(filter_result["modifications"])
+                                print(f"✅ Added location {i}: {location}")
+                            else:
+                                print(f"❌ Failed to add location {i}: {location} - {filter_result.get('error')}")
+                    
+                    # STEP 3: Generate Response
+                    print(f"🔧 STEP 3: Generating response with {len(all_modifications)} total modifications")
+                    
+                    if all_modifications:
+                        location_names = [mod["value"] for mod in all_modifications]
+                        reasoning = location_result.get("reasoning", {})
+                        
+                        message_parts = [f"Added {len(all_modifications)} locations for {base_location}:"]
+                        for name in location_names:
+                            message_parts.append(f"• {name}")
+                        
+                        if reasoning and len(reasoning) > 0:
+                            message_parts.append(f"\nWhy these locations:")
+                            for loc, reason in list(reasoning.items())[:x]:
+                                if loc in location_names:
+                                    message_parts.append(f"• {loc}: {reason}")
+                        
+                        return self._create_content({
+                            "success": True,
+                            "message": "\n".join(message_parts),
+                            "modifications": all_modifications,
+                            "trigger_search": False,
+                            "session_state": session_state,
+                            "agentic_tools_used": ["location_tool", "filter_tool"],
+                            "location_analysis": location_result
+                        })
+                    else:
+                        return self._create_content({
+                            "success": False,
+                            "message": f"Found {len(discovered_locations)} locations but failed to add them to filters",
+                            "error": "Filter tool failed to apply location modifications"
+                        })
+                else:
+                    print(f"⚠️ Location tool failed, using fallback")
+                    return await self._handle_simple_fallback_location_expansion(base_location, analysis_type, session_state)
+            else:
+                print(f"⚠️ No location tool available, using fallback")
+                return await self._handle_simple_fallback_location_expansion(base_location, analysis_type, session_state)
+                
+        except Exception as e:
+            print(f"❌ Agentic location expansion failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return await self._handle_simple_interaction(user_input, session_state)
+    
+    async def _handle_simple_fallback_location_expansion(self, base_location: str, analysis_type: str, session_state: Dict[str, Any]) -> object:
+        """Simple fallback for location expansion when location tool fails."""
+        try:
+            # Hardcoded fallback mappings
+            location_mappings = {
+                "Noida": ["Delhi", "Gurgaon", "Ghaziabad", "Greater Noida"],
+                "Delhi": ["Noida", "Gurgaon", "Faridabad", "Ghaziabad"],
+                "Mumbai": ["Pune", "Thane", "Navi Mumbai", "Nashik"],
+                "Bangalore": ["Mysore", "Chennai", "Hyderabad", "Coimbatore"],
+                "Chennai": ["Bangalore", "Coimbatore", "Madurai", "Pondicherry"],
+                "Hyderabad": ["Bangalore", "Chennai", "Vijayawada", "Warangal"],
+                "Pune": ["Mumbai", "Nashik", "Aurangabad", "Satara"]
+            }
+            
+            if analysis_type == "industry_hubs":
+                tech_hubs = ["Bangalore", "Hyderabad", "Chennai", "Pune", "Mumbai", "Delhi", "Noida", "Gurgaon"]
+                discovered_locations = [loc for loc in tech_hubs if loc != base_location][:4]
+            else:
+                discovered_locations = location_mappings.get(base_location, [base_location])[:4]
+            
+            # Add to session state
+            modifications = []
+            for location in discovered_locations:
+                if location not in session_state.get('current_cities', []):
+                    session_state.setdefault('current_cities', []).append(location)
+                    modifications.append({
+                        "type": "location_added",
+                        "field": "location", 
+                        "value": location,
+                        "mandatory": False
+                    })
+            
+            message = f"Added {len(modifications)} locations near {base_location}: {', '.join([m['value'] for m in modifications])}"
+            
+            return self._create_content({
+                "success": True,
+                "message": message,
+                "modifications": modifications,
+                "trigger_search": True,
+                "session_state": session_state,
+                "method": "fallback_mapping"
+            })
+            
+        except Exception as e:
+            return self._create_content({
+                "success": False,
+                "error": f"Location expansion failed: {str(e)}"
+            })
     
     async def _get_intelligent_task_breakdown(self, user_input: str, session_state: Dict[str, Any]) -> Dict[str, Any]:
         """Get intelligent task breakdown using LLM."""

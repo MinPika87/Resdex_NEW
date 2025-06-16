@@ -86,32 +86,42 @@ Examples:
 
     @staticmethod
     def get_general_query_prompt_with_memory(user_input: str, session_state: Dict[str, Any], memory_context: List[Dict[str, Any]]) -> str:
-        """Enhanced general query prompt with memory context."""
+        """Enhanced general query prompt with intelligent memory integration."""
         total_results = session_state.get('total_results', 0)
         current_filters = session_state.get('keywords', [])
         
+        # Format memory context for LLM intelligence (not hardcoded rules)
         memory_context_text = ""
         if memory_context and len(memory_context) > 0:
             try:
-                memory_items = []
-                for memory in memory_context[:2]:
+                memory_entries = []
+                for memory in memory_context[:5]:  # Provide more context
                     content = memory.get("content", "")
                     timestamp = memory.get("timestamp", "")
                     if content and len(content) > 5:
-                        memory_items.append(f"- {timestamp}: {content[:80]}...")
+                        memory_entries.append({
+                            "content": content,
+                            "timestamp": timestamp,
+                            "relevance_score": memory.get("score", 0.0)
+                        })
                 
-                if memory_items:
+                if memory_entries:
                     memory_context_text = f"""
 
-Relevant past conversations:
-{chr(10).join(memory_items)}
+    CONVERSATION MEMORY (Use your intelligence to determine relevance):
+    """
+                    for i, entry in enumerate(memory_entries, 1):
+                        memory_context_text += f"""
+    {i}. "{entry['content']}" (Score: {entry['relevance_score']:.2f}, Time: {entry['timestamp']})"""
+                    
+                    memory_context_text += """
 
-Use this context to provide personalized responses."""
+    Instructions: Use the above memory entries intelligently. If the user asks about personal information (like their name), search the memory for relevant details. If they ask about past conversations, reference the appropriate memories. Don't force memory usage - only use it when genuinely relevant."""
             except Exception as e:
-                print(f"⚠️ Memory context failed: {e}")
+                print(f"⚠️ Memory context processing failed: {e}")
                 memory_context_text = ""
-        
-        return f"""You are a helpful AI assistant for a candidate search system with conversation memory. Respond directly and naturally to user queries.
+    
+        return f"""You are a helpful AI assistant for a candidate search system with conversation memory. You have access to previous conversation history and should use it intelligently when relevant.
 
 Current search context:
 - Active filters: {current_filters}
@@ -120,23 +130,28 @@ Current search context:
 {memory_context_text}
 
 User input: "{user_input}"
-
-CRITICAL RULES FOR UI RESPONSES:
+INSTRUCTIONS:
 1. NO <think> tags - respond directly to the user
-2. NEVER mention displayed/shown candidates - only total results
-3. When listing capabilities, use numbered format: "1. ...", "2. ...", "3. ..."
-4. Be conversational and helpful
-5. Keep responses concise but informative
-6. If user asks about past conversations, use the conversation history provided
-7. Make responses feel personal by referencing relevant past interactions when appropriate
+2. Use conversation memory intelligently:
+   - If user asks about their name/identity, check memory for previous introductions
+   - If user references past conversations, look for relevant context
+   - If user asks about previous searches, reference search history
+   - Don't mention memory explicitly unless directly asked
+3. Be conversational and helpful
+4. Keep responses concise but informative
+5. When listing capabilities, use numbered format: "1. ...", "2. ...", "3. ..."
+6. If something is not mentioned by the user then you can assume it and reply something good to the user instead of you cannot perform the task.
 
-CAPABILITIES TO MENTION:
+
+CAPABILITIES TO MENTION (when relevant):
 1. Add/modify skills, experience ranges, locations
 2. Analyze current search results and provide insights
 3. Sort candidates by experience, salary, or other criteria
 4. Show more candidates from database
 5. Explain why certain candidates match criteria
-6. Remember and reference past conversations and searches
+6. Remember and reference our conversations naturally
+
+Respond naturally and helpfully using your intelligence to leverage conversation memory when appropriate.
 
 RESPONSE EXAMPLES:
 Input: "Hi" → "Hello! Great to continue our conversation. You have {total_results:,} total results available. I can help with:
@@ -166,7 +181,7 @@ Respond naturally and helpfully. No thinking process - just the direct response.
     @staticmethod 
     def get_task_breakdown_prompt_with_memory(user_input: str, session_state: Dict[str, Any], memory_context: List[Dict[str, Any]]) -> str:
         """Enhanced task breakdown prompt with memory context."""
-        current_location = "Mumbai"
+        current_location = ""
         current_filters = {
             'keywords': session_state.get('keywords', []),
             'experience': f"{session_state.get('min_exp', 0)}-{session_state.get('max_exp', 10)} years",
@@ -262,7 +277,7 @@ Parse the request thoroughly to extract the correct intent, using memory context
 
 Your task is to interpret the user's request and return a JSON response with the filter modifications.
 
-IMPORTANT: If the user mentions multiple actions in one request, return an array of actions. If it's a single action, return a single object.
+IMPORTANT: If the user mentions multiple actions in one request, return an array of actions. If it's a single action, return a single object. If something is not mentioned by the user then you can assume it and reply something good to the user instead of you cannot perform the task.
 
 Response formats and examples remain the same...
 

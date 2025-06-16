@@ -238,12 +238,6 @@ class ChatInterface:
             # Initialize step logging
             step_logger.start_session(session_id)
             
-            # Add user message to history
-            self.session_state['chat_history'].append({
-                "role": "user",
-                "content": user_input
-            })
-            
             # Process the message with memory integration
             success = asyncio.run(self._handle_chat_message_with_memory_and_steps(
                 user_input, session_id, step_container
@@ -358,14 +352,6 @@ class ChatInterface:
                 update_all_steps()
                 await asyncio.sleep(0.3)
             
-            # Check for memory-related commands
-            if self._is_memory_command(user_input):
-                step_logger.log_step("🧠 Memory command detected", "decision")
-                update_all_steps()
-                await asyncio.sleep(0.3)
-                
-                return await self._handle_memory_command(user_input, user_id, update_all_steps)
-            
             # Check for "show more candidates" command
             if self._is_show_more_command(user_input):
                 step_logger.log_step("📋 Show more candidates detected", "decision")
@@ -421,7 +407,7 @@ class ChatInterface:
                     })
                     await self.root_agent._handle_chat_message_complete(
                     user_input=user_input,
-                    response=error_message,
+                    response=ai_message,
                     user_id=user_id,
                     session_id=conversation_session_id
                 )
@@ -463,191 +449,131 @@ class ChatInterface:
             })
             return False
     
-    def _is_memory_command(self, user_input: str) -> bool:
-        """NEW: Check if the input is a memory-related command."""
-        memory_commands = [
-            "remember", "recall", "what did we discuss", "previous conversation",
-            "last time", "before", "earlier", "history", "past", "mentioned",
-            "talked about", "said before", "previous search", "last search",
-            "show my memory", "search memory", "conversation history"
-        ]
-        user_lower = user_input.lower()
-        return any(cmd in user_lower for cmd in memory_commands)
-    
-    async def _handle_memory_command(self, user_input: str, user_id: str, update_callback) -> bool:
-        """NEW: Handle memory-specific commands."""
+    async def _handle_search_response_with_memory(self, result, user_id: str, conversation_session_id: str, update_callback):
         try:
-            step_logger.log_step("🔍 Searching conversation memory", "search")
+            step_logger.log_step("🔧 Processing search modifications with memory", "tool")
             update_callback()
             await asyncio.sleep(0.5)
             
-            # Extract search query from the memory command
-            search_query = self._extract_memory_search_query(user_input)
-            
-            # Search memory
-            memory_tool = self.root_agent.tools.get("memory_tool")
-            if memory_tool:
-                memory_results = await memory_tool(
-                    user_id=user_id,
-                    query=search_query,
-                    max_results=5
-                )
-                
-                if memory_results["success"] and memory_results["results"]:
-                    results = memory_results["results"]
-                    step_logger.log_step(f"📚 Found {len(results)} relevant memories", "results")
+            # Update session state if provided
+            if "session_state" in result.data:
+                updated_state = result.data["session_state"]
+                if isinstance(updated_state, dict):
+                    self._update_session_state_safely(updated_state)
+                    step_logger.log_step("💾 Session state updated", "system")
                     update_callback()
                     await asyncio.sleep(0.5)
-                    
-                    # Format memory response
-                    memory_response = self._format_memory_response_for_chat(results, search_query)
-                    
-                    self.session_state['chat_history'].append({
-                        "role": "assistant",
-                        "content": memory_response
-                    })
-                    
-                    step_logger.log_completion("Memory search completed")
-                    update_callback()
-                    
-                    return True
-                else:
-                    step_logger.log_step("📭 No relevant memories found", "info")
-                    update_callback()
-                    
-                    fallback_response = f"I don't have any previous conversations about '{search_query}'. This might be our first discussion on this topic!"
-                    
-                    self.session_state['chat_history'].append({
-                        "role": "assistant",
-                        "content": fallback_response
-                    })
-                    
-                    return True
-            else:
-                step_logger.log_error("Memory tool not available")
-                update_callback()
-                return False
-                
-        except Exception as e:
-            step_logger.log_error(f"Memory command failed: {str(e)}")
-            update_callback()
-            return False
-    
-    def _extract_memory_search_query(self, user_input: str) -> str:
-        """Extract search query from memory command."""
-        # Remove common memory command phrases
-        memory_phrases = [
-            "what did we discuss about", "do you remember", "recall",
-            "what did we talk about", "previous conversation about",
-            "last time we talked about", "show my memory about"
-        ]
-        
-        query = user_input.lower()
-        for phrase in memory_phrases:
-            if phrase in query:
-                parts = query.split(phrase, 1)
-                if len(parts) > 1:
-                    query = parts[1].strip()
-                break
-        
-        # Clean up the query
-        query = query.replace("?", "").strip()
-        return query if query else user_input
-    
-    def _format_memory_response_for_chat(self, results, search_query: str) -> str:
-        """Format memory results for chat display."""
-        response_parts = [f"📚 **Found {len(results)} memories about '{search_query}':**\n"]
-        
-        for i, result in enumerate(results[:3], 1):
-            content = result.get("content", "")
-            timestamp = result.get("timestamp", "")
             
-            # Shorten content for chat display
-            if len(content) > 100:
-                content = content[:97] + "..."
+            # Add AI response to chat history
+            ai_message = result.data.get("message", "Request processed successfully.")
+            self.session_state['chat_history'].append({
+                "role": "assistant",
+                "content": ai_message
+            })
             
-            response_parts.append(f"**{i}.** {content}")
-            if timestamp:
-                response_parts.append(f"   *{timestamp}*\n")
-        
-        if len(results) > 3:
-            response_parts.append(f"*...and {len(results) - 3} more related memories.*")
-        
-        response_parts.append("\n💡 Would you like me to help you with something related to these past discussions?")
-        
-        return "\n".join(response_parts)
-    
-    async def _handle_search_response_with_memory(self, result, user_id: str, conversation_session_id: str, update_callback):
-        """Handle search interaction responses with memory integration."""
-        step_logger.log_step("🔧 Processing search modifications with memory", "tool")
-        update_callback()
-        await asyncio.sleep(0.5)
-        
-        if "session_state" in result.data:
-            updated_state = result.data["session_state"]
-            if isinstance(updated_state, dict):
-                self._update_session_state_safely(updated_state)
-                step_logger.log_step("💾 Session state updated", "system")
+            # Add interaction result to conversation memory
+            if self.session_manager:
+                await self.session_manager.add_interaction(
+                    user_id=user_id,
+                    session_id=conversation_session_id,
+                    interaction_type="search_interaction_result",
+                    content={
+                        "modifications": result.data.get("modifications", []),
+                        "trigger_search": result.data.get("trigger_search", False),
+                        "response": ai_message,
+                        "success": result.data.get("success", True)
+                    }
+                )
+            
+            # ✅ FIXED: Strict search trigger logic
+            trigger_search = result.data.get("trigger_search", False)
+            has_modifications = len(result.data.get("modifications", [])) > 0
+            
+            print(f"🔍 SEARCH TRIGGER CHECK: trigger_search={trigger_search}, has_modifications={has_modifications}")
+            
+            # Only trigger search if explicitly requested AND modifications were made
+            if trigger_search and has_modifications:
+                step_logger.log_step("🔍 Search triggered with memory context", "search")
                 update_callback()
                 await asyncio.sleep(0.5)
-        
-        ai_message = result.data.get("message", "Request processed successfully.")
-        self.session_state['chat_history'].append({
-            "role": "assistant",
-            "content": ai_message
-        })
-        
-        # NEW: Add interaction result to conversation memory
-        if self.session_manager:
-            await self.session_manager.add_interaction(
-                user_id=user_id,
-                session_id=conversation_session_id,
-                interaction_type="search_interaction_result",
-                content={
-                    "modifications": result.data.get("modifications", []),
-                    "trigger_search": result.data.get("trigger_search", False),
-                    "response": ai_message
-                }
-            )
-        
-        # Handle search trigger
-        if result.data.get("trigger_search", False):
-            step_logger.log_step("🔍 Search triggered with memory context", "search")
-            update_callback()
-            await asyncio.sleep(0.5)
+                
+                # Execute the triggered search
+                await self._handle_triggered_search_with_memory(result.data, user_id, conversation_session_id, update_callback)
+                
+            elif trigger_search and not has_modifications:
+                # User asked for search but no modifications were made - inform them
+                step_logger.log_step("⚠️ Search requested but no modifications applied", "info")
+                update_callback()
+                
+                info_message = "No filter modifications were applied. Please specify what changes you'd like to make first."
+                self.session_state['chat_history'].append({
+                    "role": "assistant",
+                    "content": info_message
+                })
+                
+            else:
+                # ✅ FIXED: No auto-search - just confirm modifications
+                if has_modifications:
+                    step_logger.log_step("✅ Filter modifications applied successfully", "completion")
+                    update_callback()
+                    
+                    # Optional: Add a helpful message about searching
+                    modification_count = len(result.data.get("modifications", []))
+                    if modification_count > 0:
+                        follow_up_msg = f"✅ Applied {modification_count} filter modification(s). Ask me to 'search' when you're ready to see results!"
+                        self.session_state['chat_history'].append({
+                            "role": "assistant",
+                            "content": follow_up_msg
+                        })
+                else:
+                    step_logger.log_step("ℹ️ No modifications applied", "info")
+                    update_callback()
             
-            await self._handle_triggered_search_with_memory(result.data, user_id, conversation_session_id, update_callback)
-        
-        # Handle automatic search results
-        if "candidates" in result.data.get("session_state", {}):
-            step_logger.log_results(
-                len(result.data["session_state"]["candidates"]),
-                result.data["session_state"].get("total_results", 0)
-            )
-            update_callback()
-            await asyncio.sleep(0.5)
+            # ✅ REMOVED: Auto-search logic that was causing unwanted searches
+            # The following block was causing automatic searches even when not requested:
+            # if "candidates" in result.data.get("session_state", {}):
+            #     success_msg = "🎯 Search completed with memory context!"
+            #     ...
             
-            success_msg = "🎯 Search completed with memory context!"
+            step_logger.log_completion("Memory-enhanced processing complete")
+            update_callback()
+            
+            # Auto-save session to memory after each interaction
+            try:
+                await self.root_agent.save_session_to_memory(user_id, conversation_session_id)
+                print(f"🧠 Auto-saved conversation to memory")
+            except Exception as e:
+                print(f"⚠️ Auto-save failed: {e}")
+            
+            await asyncio.sleep(2.0)  # Reduced from 5.0 for better responsiveness
+            
+        except Exception as e:
+            step_logger.log_error(f"Search response handling failed: {str(e)}")
+            update_callback()
+            
+            error_msg = f"❌ Error processing request: {str(e)}"
             self.session_state['chat_history'].append({
-                "role": "assistant", 
-                "content": success_msg
+                "role": "assistant",
+                "content": error_msg
             })
-        
-        step_logger.log_completion("Memory-enhanced processing complete")
-        update_callback()
-        await asyncio.sleep(5.0)
-    
+            
+            print(f"❌ _handle_search_response_with_memory failed: {e}")
+            import traceback
+            traceback.print_exc()
+
     async def _handle_triggered_search_with_memory(self, result_data: Dict[str, Any], user_id: str, conversation_session_id: str, update_callback):
-        """Handle search triggered by AI agent with memory context."""
+        """Handle search triggered by AI agent with memory context - ENHANCED VERSION."""
         try:
             step_logger.log_step("⚙️ Preparing memory-enhanced search execution", "search")
             update_callback()
             await asyncio.sleep(0.1)
             
+            # Get updated session state
             updated_state = result_data.get("session_state", self.session_state)
             if not isinstance(updated_state, dict):
                 updated_state = self._get_clean_session_state()
             
+            # Build search filters from current state
             search_filters = {
                 'keywords': updated_state.get('keywords', []),
                 'min_exp': updated_state.get('min_exp', 0),
@@ -656,34 +582,36 @@ class ChatInterface:
                 'max_salary': updated_state.get('max_salary', 15),
                 'current_cities': updated_state.get('current_cities', []),
                 'preferred_cities': updated_state.get('preferred_cities', []),
-                'recruiter_company': updated_state.get('recruiter_company', '')
+                'recruiter_company': updated_state.get('recruiter_company', ''),
+                'max_candidates': 100  # Standard limit
             }
             
-            # NEW: Add search context to memory
+            # Add search context to memory
             if self.session_manager:
                 await self.session_manager.add_interaction(
                     user_id=user_id,
                     session_id=conversation_session_id,
                     interaction_type="triggered_search",
-                    content={"filters": search_filters}
+                    content={"filters": search_filters, "trigger_reason": "filter_modification"}
                 )
             
             step_logger.log_search_execution(search_filters)
             update_callback()
             await asyncio.sleep(0.1)
             
-            # Execute search
+            # Execute search through root agent
             from ...agent import Content
             search_content = Content(data={
                 "request_type": "candidate_search",
                 "search_filters": search_filters,
-                "user_id": user_id  # NEW: Include user_id
+                "user_id": user_id
             })
             
             step_logger.log_step("📡 Calling ResDex API with memory context", "search")
             update_callback()
             await asyncio.sleep(0.1)
             
+            # Execute the search
             search_result = await self.root_agent.execute(search_content)
             
             if search_result.data["success"]:
@@ -694,13 +622,15 @@ class ChatInterface:
                 update_callback()
                 await asyncio.sleep(0.1)
                 
-                # Update session state
+                # Update session state with search results
                 self.session_state['candidates'] = candidates
+                self.session_state['all_candidates'] = candidates  # For batch display
+                self.session_state['displayed_candidates'] = candidates[:20]  # Show first 20
                 self.session_state['total_results'] = total_count
                 self.session_state['search_applied'] = True
                 self.session_state['page'] = 0
                 
-                # NEW: Add search results to memory
+                # Add search results to memory
                 if self.session_manager:
                     await self.session_manager.add_interaction(
                         user_id=user_id,
@@ -709,12 +639,13 @@ class ChatInterface:
                         content={
                             "candidates_found": len(candidates),
                             "total_count": total_count,
-                            "filters_used": search_filters
+                            "filters_used": search_filters,
+                            "success": True
                         }
                     )
                 
-                # Add success message
-                success_msg = f"🔄 {search_result.data['message']} (Memory Enhanced)"
+                # Add success message to chat
+                success_msg = f"🎯 Search completed! Found {len(candidates)} candidates from {total_count:,} total matches."
                 self.session_state['chat_history'].append({
                     "role": "assistant",
                     "content": success_msg
@@ -722,7 +653,9 @@ class ChatInterface:
                 
                 step_logger.log_completion("Memory-enhanced search completed successfully")
                 update_callback()
+                
             else:
+                # Handle search failure
                 error_msg = search_result.data.get('error', 'Unknown error')
                 step_logger.log_error(f"Search failed: {error_msg}")
                 update_callback()
@@ -733,6 +666,15 @@ class ChatInterface:
                     "content": error_response
                 })
                 
+                # Add search failure to memory
+                if self.session_manager:
+                    await self.session_manager.add_interaction(
+                        user_id=user_id,
+                        session_id=conversation_session_id,
+                        interaction_type="search_failed",
+                        content={"error": error_msg, "filters_attempted": search_filters}
+                    )
+                    
         except Exception as e:
             step_logger.log_error(f"Memory-enhanced search execution failed: {str(e)}")
             update_callback()
@@ -742,6 +684,10 @@ class ChatInterface:
                 "role": "assistant",
                 "content": error_msg
             })
+            
+            print(f"❌ _handle_triggered_search_with_memory failed: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _render_enhanced_quick_actions(self):
         """Render enhanced quick action buttons with memory features."""

@@ -76,7 +76,7 @@ class ResDexRootAgent(BaseAgent):
         # Initialize sub-agents
         self.sub_agents = {}
         self._initialize_sub_agents()
-
+        
         logger.info(f"Enhanced {self._config.name} v{self._config.version} with Memory integration")
 
     @property
@@ -832,20 +832,41 @@ class ResDexRootAgent(BaseAgent):
     # ORIGINAL METHODS FROM YOUR EXISTING AGENT.PY - ALL PRESERVED
     
     def _fallback_routing(self, user_input: str) -> Dict[str, Any]:
-        """Fallback routing using keyword detection."""
-        search_keywords = ["search", "find", "add", "remove", "filter", "set", "modify", "candidates"]
-        general_keywords = ["hi", "hello", "analyze", "explain", "what", "how", "help"]
+        # Enhanced keyword detection
+        search_keywords = [
+            "search", "find", "add", "remove", "filter", "set", "modify", "candidates",
+            "experience", "salary", "skill", "location", "increase", "decrease", 
+            "reduce", "raise", "lower", "change", "update", "years", "lakhs"
+        ]
+        
+        general_keywords = ["hi", "hello", "analyze", "explain", "what", "how", "help", "who", "why"]
         memory_keywords = ["remember", "recall", "previous", "before", "last time", "discussed"]
         
         input_lower = user_input.lower()
         
-        if any(keyword in input_lower for keyword in memory_keywords):
-            return {"success": True, "request_type": "memory_query", "confidence": 0.8}
-        elif any(keyword in input_lower for keyword in search_keywords):
-            return {"success": True, "request_type": "search_interaction", "confidence": 0.7}
-        elif any(keyword in input_lower for keyword in general_keywords):
+        # More intelligent matching
+        search_score = sum(1 for keyword in search_keywords if keyword in input_lower)
+        general_score = sum(1 for keyword in general_keywords if keyword in input_lower)
+        memory_score = sum(1 for keyword in memory_keywords if keyword in input_lower)
+        
+        # Special patterns for search interaction
+        if any(pattern in input_lower for pattern in [
+            "max experience", "min experience", "experience by", "salary by",
+            "add skill", "remove skill", "filter by"
+        ]):
+            search_score += 2  # Boost for clear filter modification patterns
+        
+        # Determine routing based on scores
+        if memory_score > 0:
+            return {"success": True, "request_type": "general_query", "confidence": 0.8, "reasoning": "Memory query detected"}
+        elif search_score > general_score:
+            return {"success": True, "request_type": "search_interaction", "confidence": 0.7 + (search_score * 0.1)}
+        elif general_score > 0:
             return {"success": True, "request_type": "general_query", "confidence": 0.7}
         else:
+            # Default to search_interaction for unclear cases with numbers/filter terms
+            if any(char.isdigit() for char in user_input):
+                return {"success": True, "request_type": "search_interaction", "confidence": 0.6}
             return {"success": True, "request_type": "general_query", "confidence": 0.5}
     
     async def _execute_filter_modification(self, parameters: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:

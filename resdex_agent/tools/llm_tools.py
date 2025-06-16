@@ -61,7 +61,6 @@ class LLMTool(Tool):
             return {"success": False, "error": str(e)}
     
     async def _call_llm_direct(self, prompt: str, task: str = "general") -> Dict[str, Any]:
-        """Direct LLM call for root agent routing and general queries."""
         try:
             messages = [{"role": "user", "content": prompt}]
             
@@ -90,24 +89,73 @@ class LLMTool(Tool):
             
             print(f"\n✅ STREAMING COMPLETE - Length: {len(full_response)} characters")
             
-            cleaned_response = self._clean_llm_response(full_response)
-            
-            if task in ["routing", "task_breakdown"]:
+            # ENHANCED: Handle JSON parsing tasks with debugging
+            if task in ["routing", "routing_with_memory", "task_breakdown"]:
+                print(f"🔍 ATTEMPTING JSON PARSING for task: {task}")
+                
+                # Clean the response
+                cleaned_response = self._clean_llm_response(full_response)
+                print(f"🧹 CLEANED RESPONSE: {cleaned_response}")
+                
+                # Try to parse JSON
                 parsed_data = self.data_processor.extract_json_from_text(cleaned_response)
+                print(f"🔍 PARSED DATA: {parsed_data} (type: {type(parsed_data)})")
+                
                 if parsed_data:
+                    print(f"✅ JSON PARSING SUCCESS for {task}")
                     return {
                         "success": True,
                         "parsed_response": parsed_data,
                         "raw_response": full_response,
+                        "cleaned_response": cleaned_response,
                         "task": task
                     }
                 else:
+                    print(f"❌ JSON PARSING FAILED for task: {task}")
+                    print(f"🔍 Raw response preview: {full_response[:300]}...")
+                    print(f"🧹 Cleaned response preview: {cleaned_response[:300]}...")
+                    
+                    # Try manual JSON extraction as fallback
+                    import json
+                    import re
+                    
+                    # Look for JSON patterns manually
+                    json_patterns = [
+                        r'\{[^{}]*"request_type"[^{}]*\}',  # Simple object pattern
+                        r'\{[\s\S]*?"request_type"[\s\S]*?\}',  # Multi-line object
+                        r'\[[\s\S]*?\]'  # Array pattern
+                    ]
+                    
+                    for pattern in json_patterns:
+                        matches = re.findall(pattern, cleaned_response, re.IGNORECASE)
+                        for match in matches:
+                            try:
+                                manual_parsed = json.loads(match)
+                                print(f"✅ MANUAL JSON PARSING SUCCESS: {manual_parsed}")
+                                return {
+                                    "success": True,
+                                    "parsed_response": manual_parsed,
+                                    "raw_response": full_response,
+                                    "cleaned_response": cleaned_response,
+                                    "task": task,
+                                    "parsing_method": "manual_regex"
+                                }
+                            except json.JSONDecodeError:
+                                continue
+                    
+                    print(f"❌ ALL JSON PARSING METHODS FAILED for {task}")
                     return {
                         "success": False,
-                        "error": "Failed to parse JSON response",
-                        "raw_response": full_response
+                        "error": "Failed to parse JSON response after all attempts",
+                        "raw_response": full_response,
+                        "cleaned_response": cleaned_response,
+                        "task": task
                     }
+            
+            # ENHANCED: Handle non-JSON tasks  
             else:
+                cleaned_response = self._clean_llm_response(full_response)
+                print(f"✅ NON-JSON TASK COMPLETED: {task}")
                 return {
                     "success": True,
                     "response_text": cleaned_response,
@@ -117,6 +165,9 @@ class LLMTool(Tool):
                 
         except Exception as e:
             logger.error(f"Direct LLM call failed: {e}")
+            print(f"❌ LLM CALL EXCEPTION: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 "success": False,
                 "error": str(e),
@@ -228,6 +279,20 @@ ACTION TYPES:
 - modify_salary: Change salary range
 - add_location: Add a city location
 
+OPERATION TYPES (USE ONLY THESE):
+- For experience/salary: "set_range" (for ranges like "5-10") or "set" (for single values)
+- NEVER use: "decrease_max_by", "increase_by", "reduce_by" - these don't exist!
+
+EXPERIENCE/SALARY MODIFICATION LOGIC:
+- "reduce experience by 2" → Calculate new range: current max - 2, use "set_range"
+- "increase salary by 5" → Calculate new range: current max + 5, use "set_range"  
+- "set experience to 8" → Use "set" with value "8"
+- "experience 5-12 years" → Use "set_range" with value "5-12"
+
+CURRENT VALUES FOR CALCULATIONS:
+- Current experience: {current_filters.get('min_exp', 0)}-{current_filters.get('max_exp', 10)} years
+- Current salary: {current_filters.get('min_salary', 0)}-{current_filters.get('max_salary', 15)} lakhs
+
 TRIGGER_SEARCH LOGIC - SIMPLIFIED:
 - If user request starts with "search with" or "find" or "show me": SET trigger_search=true for ALL actions
 - If user request is just modifications without "search": SET trigger_search=false for ALL actions
@@ -245,6 +310,19 @@ VALUE FORMATS:
 - Locations: "Bangalore", "Mumbai" (clean city names)
 
 EXAMPLES:
+Input: "reduce experience by 2"
+Current: 0-10 years
+Calculation: 10 - 2 = 8
+Output: {{"action": "modify_experience", "operation": "set_range", "value": "0-8", "response_text": "Reduced experience range to 0-8 years", "trigger_search": false}}
+
+Input: "increase salary by 5"  
+Current: 0-15 lakhs
+Calculation: 15 + 5 = 20
+Output: {{"action": "modify_salary", "operation": "set_range", "value": "0-20", "response_text": "Increased salary range to 0-20 lakhs", "trigger_search": false}}
+
+Input: "set max experience to 12"
+Current: 0-10 years  
+Output: {{"action": "modify_experience", "operation": "set_range", "value": "0-12", "response_text": "Set experience range to 0-12 years", "trigger_search": false}}
 
 Input: "add python as mandatory"
 Output: {{"action": "add_skill", "value": "Python", "mandatory": true, "response_text": "Added Python as mandatory skill", "trigger_search": false}}
@@ -264,15 +342,39 @@ Return ONLY the JSON response."""
     
     def _clean_llm_response(self, response: str) -> str:
         import re
-        cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-        cleaned = cleaned.strip()
-        array_match = re.search(r'\[.*\]', cleaned, re.DOTALL)
-        if array_match:
-            return array_match.group(0).strip()
-        object_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        if object_match:
-            return object_match.group(0).strip()
+        import json
         
+        # Remove <think> tags first
+        cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = cleaned.strip()
+        
+        # Try to find and validate JSON
+        # Look for array first [...]
+        array_pattern = r'\[[\s\S]*?\]'
+        array_match = re.search(array_pattern, cleaned)
+        if array_match:
+            json_text = array_match.group(0).strip()
+            try:
+                # Validate it's proper JSON
+                json.loads(json_text)
+                return json_text
+            except json.JSONDecodeError:
+                pass
+        
+        # Then try to find object {...}
+        object_pattern = r'\{[\s\S]*?\}'
+        object_match = re.search(object_pattern, cleaned)
+        if object_match:
+            json_text = object_match.group(0).strip()
+            try:
+                # Validate it's proper JSON
+                json.loads(json_text)
+                return json_text
+            except json.JSONDecodeError:
+                pass
+        
+        # If no valid JSON found, return cleaned text
+        print(f"⚠️ No valid JSON found in response: {cleaned[:200]}...")
         return cleaned
     
     def _default_intent_response(self, user_input: str) -> Dict[str, Any]:

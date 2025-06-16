@@ -192,7 +192,6 @@ class InMemoryMemoryService:
             return SearchMemoryResponse(results=[], query=query, total_found=0)
     
     def _extract_memory_from_session(self, session: ADKSession) -> List[Dict[str, Any]]:
-        """Extract meaningful memory entries from a session."""
         memory_entries = []
         
         try:
@@ -202,9 +201,9 @@ class InMemoryMemoryService:
                 if memory_entry:
                     memory_entries.append(memory_entry)
             
-            # Add session summary as a memory entry
+            # ENHANCED: Add session summary with better context
             if session.events:
-                summary_entry = self._create_session_summary_entry(session)
+                summary_entry = self._create_enhanced_session_summary_entry(session)
                 if summary_entry:
                     memory_entries.append(summary_entry)
             
@@ -325,36 +324,67 @@ class InMemoryMemoryService:
             logger.error(f"Failed to extract keywords: {e}")
             return []
     
-    def _create_session_summary_entry(self, session: ADKSession) -> Optional[Dict[str, Any]]:
-        """Create a summary memory entry for the entire session."""
+    def _create_enhanced_session_summary_entry(self, session: ADKSession) -> Optional[Dict[str, Any]]:
         try:
             if not session.events:
                 return None
             
-            # Create session summary
-            event_types = [event.get("type", "") for event in session.events]
-            unique_types = list(set(event_types))
+            # Extract meaningful information from events
+            user_messages = []
+            assistant_responses = []
+            search_queries = []
+            user_name = None
             
+            for event in session.events:
+                content = event.get("content", {})
+                event_type = event.get("type", "")
+                
+                if event_type == "user_input":
+                    message = content.get("message", "")
+                    if message:
+                        user_messages.append(message)
+                        # Extract name if mentioned
+                        if "my name is" in message.lower():
+                            import re
+                            name_match = re.search(r'my name is (\w+)', message.lower())
+                            if name_match:
+                                user_name = name_match.group(1).title()
+                
+                elif event_type == "assistant_response":
+                    response = content.get("message", "")
+                    if response:
+                        assistant_responses.append(response[:100])
+                
+                elif event_type == "search_request":
+                    query = content.get("query", "")
+                    if query:
+                        search_queries.append(query)
+            
+            # Create comprehensive summary
             summary_parts = []
             summary_parts.append(f"Session with {len(session.events)} interactions")
             
-            if "user_input" in event_types:
-                summary_parts.append("user conversations")
-            if "search_request" in event_types:
-                summary_parts.append("candidate searches")
-            if "search_results" in event_types:
-                summary_parts.append("search results")
+            if user_name:
+                summary_parts.append(f"User name: {user_name}")
             
-            summary_content = f"Session summary: {', '.join(summary_parts)}"
+            if user_messages:
+                summary_parts.append(f"User discussed: {', '.join(user_messages[:3])}")
+            
+            if search_queries:
+                summary_parts.append(f"Searched for: {', '.join(search_queries[:2])}")
+            
+            summary_content = " | ".join(summary_parts)
             
             return {
-                "id": f"session_summary_{session.session_id}",
-                "type": "session_summary",
+                "id": f"enhanced_summary_{session.session_id}",
+                "type": "enhanced_session_summary",
                 "content": summary_content,
                 "original_content": {
                     "session_id": session.session_id,
                     "event_count": len(session.events),
-                    "event_types": unique_types,
+                    "user_name": user_name,
+                    "user_messages": user_messages[:5],  # Keep last 5
+                    "search_queries": search_queries[:3],  # Keep last 3
                     "duration": (session.updated_at - session.created_at).total_seconds()
                 },
                 "session_id": session.session_id,
@@ -362,24 +392,24 @@ class InMemoryMemoryService:
                 "timestamp": session.updated_at.isoformat(),
                 "app_name": session.app_name,
                 "keywords": self._extract_keywords(summary_content),
-                "metadata": {"is_summary": True}
+                "metadata": {"is_enhanced_summary": True, "user_name": user_name}
             }
             
         except Exception as e:
-            logger.error(f"Failed to create session summary: {e}")
+            logger.error(f"Failed to create enhanced session summary: {e}")
             return None
     
     def _search_memories(self, memories: List[Dict[str, Any]], query: str) -> List[MemoryResult]:
-        """Perform keyword-based search on memories."""
         try:
             query_keywords = self._extract_keywords(query.lower())
             if not query_keywords:
-                return []
+                # If no keywords, return recent memories
+                return self._get_recent_memories(memories, limit=5)
             
             results = []
             
             for memory in memories:
-                score = self._calculate_relevance_score(memory, query_keywords)
+                score = self._calculate_intelligent_relevance_score(memory, query_keywords, query)
                 if score > 0:  # Only include relevant results
                     result = MemoryResult(
                         content=memory.get("content", ""),
@@ -396,40 +426,58 @@ class InMemoryMemoryService:
             logger.error(f"Failed to search memories: {e}")
             return []
     
-    def _calculate_relevance_score(self, memory: Dict[str, Any], query_keywords: List[str]) -> float:
-        """Calculate relevance score for a memory entry."""
+    def _calculate_intelligent_relevance_score(self, memory: Dict[str, Any], query_keywords: List[str], original_query: str) -> float:
         try:
             memory_keywords = memory.get("keywords", [])
             memory_content = memory.get("content", "").lower()
+            original_content = memory.get("original_content", {})
             
             if not memory_keywords and not memory_content:
                 return 0.0
             
             score = 0.0
             
-            # Keyword matching in extracted keywords
+            # 1. Direct keyword matching
             for query_kw in query_keywords:
                 for memory_kw in memory_keywords:
                     if query_kw in memory_kw or memory_kw in query_kw:
                         score += 1.0
-            
-            # Direct text matching in content
-            for query_kw in query_keywords:
+                
+                # Direct content matching
                 if query_kw in memory_content:
-                    score += 0.5
+                    score += 0.7
             
-            # Boost recent memories slightly
+            # 2. Intelligent context matching
+            if "name" in original_query.lower():
+                # Boost memories that contain name information
+                if "name" in memory_content or "my name is" in memory_content:
+                    score += 2.0
+                if isinstance(original_content, dict) and original_content.get("user_name"):
+                    score += 3.0  # High boost for memories with extracted names
+            
+            # 3. Content type relevance
+            memory_type = memory.get("type", "")
+            if memory_type == "user_input" and len(query_keywords) > 0:
+                score += 0.5  # Boost user inputs for general queries
+            elif memory_type == "session_summary":
+                score += 0.3  # Moderate boost for summaries
+            
+            # 4. Recency boost (more recent = higher score)
             try:
                 memory_time = datetime.fromisoformat(memory.get("timestamp", ""))
-                age_days = (datetime.now() - memory_time).days
-                if age_days < 7:  # Boost memories from last week
+                age_hours = (datetime.now() - memory_time).total_seconds() / 3600
+                if age_hours < 1:  # Very recent
+                    score += 0.5
+                elif age_hours < 24:  # Recent
+                    score += 0.3
+                elif age_hours < 168:  # This week
                     score += 0.1
             except:
                 pass
             
-            # Boost important event types
-            event_type = memory.get("type", "")
-            if event_type in ["user_input", "search_request", "general_response"]:
+            # 5. Content quality boost
+            content_length = len(memory_content)
+            if 20 <= content_length <= 200:  # Ideal length
                 score += 0.2
             
             return score
@@ -438,7 +486,33 @@ class InMemoryMemoryService:
             logger.error(f"Failed to calculate relevance score: {e}")
             return 0.0
     
-    def _trim_user_memory(self, user_id: str, max_entries: int = 100):
+    def _get_recent_memories(self, memories: List[Dict[str, Any]], limit: int = 5) -> List[MemoryResult]:
+        """Get recent memories when no specific query."""
+        try:
+            # Sort by timestamp and return recent ones
+            sorted_memories = sorted(
+                memories, 
+                key=lambda x: x.get("timestamp", ""), 
+                reverse=True
+            )
+            
+            results = []
+            for memory in sorted_memories[:limit]:
+                result = MemoryResult(
+                    content=memory.get("content", ""),
+                    session_id=memory.get("session_id", ""),
+                    timestamp=memory.get("timestamp", ""),
+                    score=0.5,  # Default score for recent memories
+                    metadata=memory.get("metadata", {})
+                )
+                results.append(result)
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Failed to get recent memories: {e}")
+            return []
+    def _trim_user_memory(self, user_id: str, max_entries: int = 500):
         """Trim user memory to prevent unbounded growth."""
         try:
             if user_id not in self.memory_store:
