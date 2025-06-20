@@ -411,7 +411,7 @@ class ResDexRootAgent(BaseAgent):
                     return {
                         "success": True,
                         "request_type": parsed_response.get("request_type", "general_query"),
-                        "confidence": parsed_response.get("confidence", 0.5),
+                        "confidence": parsed_refsponse.get("confidence", 0.5),
                         "reasoning": parsed_response.get("reasoning", ""),
                         "memory_influenced": parsed_response.get("memory_influenced", False)
                     }

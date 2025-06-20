@@ -1,0 +1,38 @@
+Input Query,Expected Output,Model Output,Processing Time (s),Status
+Show me candidates with python,Skill added: Python; Search executed,Skill added: Python*; Action: search_triggered - search_executed; Search executed,58.6,PASSED
+Experience atleast 5,Experience set: 5-10 years,Experience set: 5-10 years,64.249,PASSED
+chennai ones?,Location added: Chennai,Location added: Chennai,86.365,PASSED
+Salary 8-15 lpa,Salary range set: 8-15 LPA,Salary range set: 8-15 LPA,67.334,PASSED
+Candidates from major Tech Cities,Location added: Bangalore; Location added: Gurgaon; Location added: Mumbai; Location added: Delhi; Location added: Noida,"Location added: Bangalore; Location added: Hyderabad; Location added: Coimbatore; Location added: Madurai; Location added: Trichy; Found similar locations: Bangalore, Hyderabad, Coimbatore",154.181,FAILED
+Make react permanent,Skill added: React*,Skill added: React*,59.238,PASSED
+From BLR,Location added: Bangalore,Location added: Blr; Found similar locations: BLR,124.303,FAILED
+Freshers?,Experience set: 0-1 years,No actions taken,49.64,FAILED
+add java,Skill added: Java,Skill added: Java,58.495,PASSED
+"Java,python and from BLR",Location added: Bangalore,Skill made optional: Python; Location added: Blr,78.639,FAILED
+Search python as you did react,Skill made mandatory: Python; Search executed,Skill made mandatory: Python; Action: search_triggered - search_executed; Search executed,65.903,PASSED
+"same filters, add noida",Location added: Noida,Location added: Noida,63.485,PASSED
+Include spring boot,Skill added: Spring Boot,Skill added: Spring Boot,58.335,PASSED
+set same salary range,Salary range set: 8.0-15.0 LPA,No actions taken,92.823,FAILED
+mark all the optional locations to mandatory,Location added (mandatory): Chennai; Location added (mandatory): Bangalore; Location added (mandatory): Hyderabad; Location added (mandatory): Coimbatore; Location added (mandatory): Madurai; Location added (mandatory): Trichy; Location added (mandatory): Noida,No actions taken,270.819,FAILED
+"Use the previous filters, but make experience flexible.",Experience set: 0-5 years,No actions taken,258.52,FAILED
+"Dont change the filters , just add that candidates must be active recently.",No actions taken,No actions taken,134.449,PASSED
+"Add ""Go"" with the skills we had already",Skill added: Go,Skill added: Go,70.177,PASSED
+"keep same filters, increase salary by 5",Salary range set: 8.0-20.0 LPA,Salary range set: 8-20 LPA,69.934,FAILED
+Bring in the cities we used in the last Bangalore search.,No actions taken,No actions taken,24.493,PASSED
+"Exp 3+, form mumbai and pune",Experience set: 3-5 years; Location added: Mumbai; Location added: Pune,Location added: Mumbai; Location added: Pune,72.733,FAILED
+"React, node and increase salary by 5",Skill made optional: React; Skill added: Node; Salary range set: 8.0-25.0 LPA,Skill made optional: React; Skill added: Node; Salary range set: 8.0-25.0 LPA,60.659,PASSED
+people from delhi and nearby,Location added: Delhi,Location added: Delhi; Location added: Gurgaon; Location added: Ghaziabad; Location added: Faridabad; Location added: Meerut,151.132,PASSED
+I want engineers with Python who are based near Hyderabad.,Location added: Hyderabad,Location added: Warangal; Location added: Khammam; Location added: Nizamabad; Location added: Karimnagar; Location added: Adilabad; Action: search_triggered - search_executed; Search executed,137.473,FAILED
+Search for frontend developers earning between 10 and 20 LPA.,Skill added: Frontend Developer; Salary range set: 10-20 LPA; Search executed,Salary range set: 10-20 LPA; Action: search_triggered - search_executed; Search executed,65.903,FAILED
+Im hiring backend devs in NCR with Django and Postgres.,Skill added: Django*; Skill added: Postgres*; Location added: Ncr,Skill added: Django*,295.317,FAILED
+Show profiles of Android developers from nearby Noida areas.,Skill added: Android; Location added: Noida; Search executed,Skill added: Android Developer*; Location added: Greater Noida; Location added: Gurugram; Action: search_triggered - search_executed; Search executed,143.182,FAILED
+Give me recently active people in Chennai with 3+ years of experience.,No actions taken,Location added: Chennai; Action: search_triggered - search_executed; Search executed,54.887,FAILED
+Im hiring data engineers with Spark from Bangalore or nearby.,Skill added: Data Engineer*; Skill added: Spark*; Location added: Bangalore; Search executed,Skill added: Spark*; Location added: Bangalore; Location added: Chikkaballapur; Location added: Tumakuru; Location added: Mandya; Location added: Hassan; Location added: Mysore; Action: search_triggered - search_executed; Search executed,183.047,PASSED
+I need DevOps folks with 5+ years earning above 15 LPA.,Skill added: DevOps*; Experience set: 5-5 years; Salary range set: 15-20 LPA,Min experience set: 5 years; Salary modified: set_range 15,72.598,FAILED
+"Repeat the search we did for frontend folks last week, but for Pune this time.",Location added: Pune; Search executed,Location added: Pune; Action: search_triggered - search_executed; Search executed,73.283,PASSED
+Take the same skills we added before and just add Angular and add some nearby locations to Delhi,No actions taken,No actions taken,0.0,PASSED
+"Start from the same filters, but narrow to profiles active this month.",No actions taken,No actions taken,294.023,PASSED
+"Use our earlier Bangalore search, increase salary by 5.",No actions taken,No actions taken,0.0,PASSED
+keep filters same but canidates from BLR and Lucknow,Location added: Lucknow,Location added: Blr; Location added: Lucknow,66.842,PASSED
+Find candidates like before but with more experience.,No actions taken,No actions taken,0.0,PASSED
+Resume the last search and add Delhi-NCR nearby.,No actions taken,No actions taken,0.0,PASSED

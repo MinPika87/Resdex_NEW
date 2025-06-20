@@ -144,7 +144,7 @@ class LocationAnalysisTool(Tool):
     
     # In LocationAnalysisTool._find_nearby_locations method, fix the LLM call:
 
-    async def _find_nearby_locations(self, base_location: str, radius_km: Optional[int] = None) -> Dict[str, Any]:    
+    async def _find_nearby_locations(self, base_location: str, radius_km: Optional[int] = None) -> Dict[str, Any]:
         radius = radius_km or 200  # Default 200km radius
         
         prompt = f"""You are a geography expert for India. Find cities within approximately {radius} km of {base_location}.

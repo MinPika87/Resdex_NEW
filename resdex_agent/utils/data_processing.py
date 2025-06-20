@@ -45,26 +45,59 @@ class DataProcessor:
     
     @staticmethod
     def extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
-        """Extract JSON object from text response."""
+        """Extract JSON object from text response with enhanced patterns."""
         try:
+            import json
+            import re
+            
             # Remove thinking tags and extra text
             cleaned_text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
             cleaned_text = cleaned_text.strip()
             
-            # Try to find JSON array first
-            array_match = re.search(r'\[.*\]', cleaned_text, re.DOTALL)
-            if array_match:
-                json_content = array_match.group(0).strip()
-                try:
-                    return json.loads(json_content)
-                except:
-                    pass
+            # Enhanced JSON extraction patterns
+            patterns = [
+                # Multi-intent specific pattern
+                r'\{[\s\S]*?"is_multi_intent"[\s\S]*?"reasoning":\s*"[^"]*"[\s\S]*?\}',
+                # Routing specific pattern  
+                r'\{[\s\S]*?"request_type"[\s\S]*?"memory_influenced"[\s\S]*?\}',
+                # General object pattern
+                r'\{[\s\S]*?\}',
+                # Array pattern
+                r'\[[\s\S]*?\]'
+            ]
             
-            # Try to find JSON object
-            object_match = re.search(r'\{.*\}', cleaned_text, re.DOTALL)
-            if object_match:
-                json_content = object_match.group(0).strip()
-                return json.loads(json_content)
+            for pattern in patterns:
+                matches = re.findall(pattern, cleaned_text, re.MULTILINE | re.DOTALL)
+                for match in matches:
+                    try:
+                        # Clean the match
+                        match_clean = match.strip()
+                        
+                        # Remove trailing commas
+                        match_clean = re.sub(r',(\s*[}\]])', r'\1', match_clean)
+                        
+                        # Try to parse
+                        parsed = json.loads(match_clean)
+                        
+                        # Validate it's the right type of response
+                        if isinstance(parsed, dict):
+                            # Check for multi-intent response
+                            if "is_multi_intent" in parsed:
+                                return parsed
+                            # Check for routing response
+                            elif "request_type" in parsed:
+                                return parsed
+                            # Check for task breakdown
+                            elif "tasks" in parsed:
+                                return parsed
+                            # Generic object
+                            else:
+                                return parsed
+                        elif isinstance(parsed, list):
+                            return parsed
+                            
+                    except json.JSONDecodeError:
+                        continue
             
             return None
             

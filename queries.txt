@@ -1,0 +1,37 @@
+Show me candidates with python
+Experience atleast 5
+chennai ones?
+Salary 8-15 lpa
+Candidates from major Tech Cities
+Make react permanent
+From BLR
+Freshers?
+add java
+Java,python and from BLR
+Search python as you did react
+same filters, add noida
+Include spring boot
+set same salary range
+mark all the optional locations to mandatory
+Use the previous filters, but make experience flexible.
+Dont change the filters , just add that candidates must be active recently.
+Add "Go" with the skills we had already
+keep same filters, increase salary by 5
+Bring in the cities we used in the last Bangalore search.
+Exp 3+, form mumbai and pune
+React, node and increase salary by 5
+people from delhi and nearby
+I want engineers with Python who are based near Hyderabad.
+Search for frontend developers earning between 10 and 20 LPA.
+Im hiring backend devs in NCR with Django and Postgres.
+Show profiles of Android developers from nearby Noida areas.
+Give me recently active people in Chennai with 3+ years of experience.
+Im hiring data engineers with Spark from Bangalore or nearby.
+I need DevOps folks with 5+ years earning above 15 LPA.
+Repeat the search we did for frontend folks last week, but for Pune this time.
+Take the same skills we added before and just add Angular and add some nearby locations to Delhi
+Start from the same filters, but narrow to profiles active this month.
+Use our earlier Bangalore search, increase salary by 5.
+keep filters same but canidates from BLR and Lucknow
+Find candidates like before but with more experience.
+Resume the last search and add Delhi-NCR nearby.

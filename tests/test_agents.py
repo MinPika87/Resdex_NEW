@@ -1,7 +1,3 @@
-"""
-Unit tests for ResDex Agent components.
-"""
-
 import pytest
 import asyncio
 from unittest.mock import Mock, patch
@@ -13,17 +9,15 @@ from resdx_agent.config import AgentConfig
 
 
 class TestResDexRootAgent:
-    """Test cases for the root agent."""
-    
+    #Test Cases    
     @pytest.fixture
     def agent(self):
-        """Create a test agent instance."""
+        #Test Instance
         config = AgentConfig()
         return ResDexRootAgent(config)
     
     @pytest.mark.asyncio
-    async def test_health_check(self, agent):
-        """Test agent health check functionality."""
+    async def test_health_check(self, agent): #beta function
         content = Content(data={"request_type": "health_check"})
         result = await agent.execute(content)
         
@@ -56,12 +50,10 @@ class TestSearchInteractionAgent:
     
     @pytest.fixture
     def agent(self):
-        """Create a test search interaction agent."""
         return SearchInteractionAgent()
     
     @pytest.mark.asyncio
     async def test_skill_addition(self, agent):
-        """Test adding a skill through natural language."""
         content = Content(data={
             "user_input": "add python as mandatory",
             "session_state": {"keywords": []}

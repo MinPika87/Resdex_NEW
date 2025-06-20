@@ -90,7 +90,7 @@ class LLMTool(Tool):
             print(f"\n✅ STREAMING COMPLETE - Length: {len(full_response)} characters")
             
             # ENHANCED: Handle JSON parsing tasks with debugging
-            if task in ["routing", "routing_with_memory", "task_breakdown"]:
+            if task in ["routing", "routing_with_memory", "task_breakdown","multi_intent_analysis", "skill_expansion", "designation_skill_analysis"]:
                 print(f"🔍 ATTEMPTING JSON PARSING for task: {task}")
                 
                 # Clean the response
