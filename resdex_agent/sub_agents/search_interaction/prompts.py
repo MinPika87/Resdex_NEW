@@ -1,30 +1,48 @@
+# resdex_agent/sub_agents/search_interaction/prompts.py - NEW
 """
-Prompts for Search Interaction Sub-Agent.
+Search Interaction Agent Specific Prompts
 """
 
-from typing import Dict, Any
-import logging
-
-logger = logging.getLogger(__name__)
+from typing import Dict, Any, List
 
 
-class IntentExtractionPrompt:
-    """Prompt template for extracting search modification intents."""
+class SearchInteractionPrompts:
+    """Prompts specific to SearchInteractionAgent."""
     
-    def __init__(self):
-        self.system_prompt_template = """You are an AI assistant that helps interpret user requests to modify search filters for a job candidate search system.
+    @staticmethod
+    def get_intent_extraction_prompt_with_memory(user_input: str, current_filters: Dict[str, Any], 
+                                                memory_context: List[Dict[str, Any]]) -> str:
+        """Intent extraction prompt with memory context."""
+        
+        memory_summary = ""
+        if memory_context:
+            memory_items = [f"- {mem.get('content', '')[:80]}" for mem in memory_context[:2]]
+            memory_summary = f"\nRecent search history:\n{chr(10).join(memory_items)}\n"
+        
+        filters_str = f"""- Keywords: {current_filters.get('keywords', [])}
+- Experience: {current_filters.get('min_exp', 0)}-{current_filters.get('max_exp', 10)} years
+- Salary: {current_filters.get('min_salary', 0)}-{current_filters.get('max_salary', 15)} lakhs
+- Current Cities: {current_filters.get('current_cities', [])}
+- Preferred Cities: {current_filters.get('preferred_cities', [])}"""
+        
+        return f"""You are a search filter assistant with memory awareness. Extract filter modifications from user requests.
 
-Current search filters:
-{current_filters}
+Current filters:
+{filters_str}
 
-Your task is to interpret the user's request and return a JSON response with the filter modifications.
+{memory_summary}
 
-IMPORTANT: If the user mentions multiple actions in one request, return an array of actions. If it's a single action, return a single object.
+User request: "{user_input}"
 
-Single action response format:
+IMPORTANT: Return ONLY valid JSON - no explanations, no extra text.
+
+For single action: return one object
+For multiple actions: return array of objects
+
+RESPONSE FORMAT:
 {{
-    "action": "add_skill|remove_skill|modify_experience|modify_salary|add_location|remove_location|make_mandatory|make_optional",
-    "filter_type": "keywords|experience|salary|location",
+    "action": "add_skill|remove_skill|modify_experience|modify_salary|add_location|remove_location",
+    "filter_type": "keywords|experience|salary|location", 
     "operation": "add|remove|set|set_range|increase|decrease",
     "value": "extracted_value",
     "mandatory": true/false,
@@ -32,43 +50,41 @@ Single action response format:
     "trigger_search": true/false
 }}
 
-Multiple actions response format:
-[
-    {{action1}},
-    {{action2}},
-    ...
-]
+MANDATORY DETECTION:
+- mandatory=true for: "mandatory", "important", "must have", "required", "essential"
+- mandatory=false for: "optional", "nice to have", "preferred", default case
 
-MANDATORY vs OPTIONAL Keywords:
-- Mandatory means the candidate MUST have this skill (marked with ★ in UI)
-- Optional means the candidate can have this skill but it's not required
+TRIGGER_SEARCH LOGIC:
+- If user says "search with X" or "find X" or "show me X" → trigger_search: true
+- If user says "add X" without "search" → trigger_search: false
 
-Mandatory indicators: "mandatory", "important", "must have", "should have", "required", "essential", "critical"
-Optional indicators: "optional", "nice to have", "preferred", "good to have", "can have"
+EXAMPLES:
+"add python" → {{"action": "add_skill", "value": "Python", "mandatory": false, "trigger_search": false}}
+"search with java" → {{"action": "add_skill", "value": "Java", "mandatory": false, "trigger_search": true}}
+"set experience 5-10 years" → {{"action": "modify_experience", "operation": "set_range", "value": "5-10", "trigger_search": false}}
 
-Rules for trigger_search:
-- If user says "search with X" or "find X" or "show me X candidates" -> trigger_search: true
-- If user says "add X" without "search" -> trigger_search: false
-- If user mentions "candidates from X" -> trigger_search: true
-
-Examples:
-- "add python as mandatory" -> {{"action": "add_skill", "value": "Python", "mandatory": true, "trigger_search": false}}
-- "search with python" -> {{"action": "add_skill", "value": "Python", "mandatory": false, "trigger_search": true}}
-- "remove java and add python" -> [
-    {{"action": "remove_skill", "value": "Java", "trigger_search": false}},
-    {{"action": "add_skill", "value": "Python", "mandatory": false, "trigger_search": false}}
-  ]
-
-Return ONLY valid JSON response. No additional text or explanation."""
+Return ONLY the JSON response."""
     
-    def build_prompt(self, user_input: str, current_filters: Dict[str, Any]) -> str:
-        """Build the complete prompt for intent extraction."""
-        filters_str = f"""- Keywords: {current_filters.get('keywords', [])}
-- Experience: {current_filters.get('min_exp', 0)}-{current_filters.get('max_exp', 10)} years
-- Salary: {current_filters.get('min_salary', 0)}-{current_filters.get('max_salary', 15)} lakhs
-- Cities: {current_filters.get('current_cities', [])}
-- Preferred Cities: {current_filters.get('preferred_cities', [])}"""
-        
-        system_prompt = self.system_prompt_template.format(current_filters=filters_str)
-        
-        return f"{system_prompt}\n\nUser request: {user_input}"
+    @staticmethod
+    def get_candidate_operation_prompt(user_input: str, candidates_count: int) -> str:
+        """Prompt for candidate operations like sorting."""
+        return f"""You are processing operations on {candidates_count} existing candidates.
+
+User request: "{user_input}"
+
+Determine the operation type:
+
+OPERATIONS:
+- sort_by_experience: Sort candidates by experience level
+- sort_by_salary: Sort candidates by salary 
+- sort_by_name: Sort candidates by name
+- filter_results: Filter existing results
+- show_more: Show more candidates (pagination)
+- no_operation: No specific operation detected
+
+Return ONLY JSON:
+{{
+    "operation": "sort_by_experience|sort_by_salary|sort_by_name|filter_results|show_more|no_operation",
+    "sort_order": "asc|desc",
+    "confidence": 0.0-1.0
+}}"""

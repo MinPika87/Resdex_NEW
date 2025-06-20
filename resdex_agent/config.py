@@ -1,5 +1,6 @@
+# resdex_agent/config.py - UPDATED for Phase 1 Agents
 """
-Configuration management for ResDex Agent - FIXED to ensure Qwen API usage.
+Configuration management for ResDex Agent - UPDATED with new agent support.
 """
 
 import os
@@ -13,7 +14,7 @@ load_dotenv()
 
 class DatabaseConfig(BaseModel):
     """Database connection configuration."""
-    host: str = Field(default_factory=lambda: os.getenv("DB_HOST", "172.10.112.103:3306"))
+    host: str = Field(default_factory=lambda: os.getenv("DB_HOST", "172.10.112.169:3306"))
     user: str = Field(default_factory=lambda: os.getenv("DB_USER", "user_analytics"))
     password: str = Field(default_factory=lambda: os.getenv("DB_PASSWORD", "anaKm7Iv80l"))
     database: str = Field(default_factory=lambda: os.getenv("DB_NAME", "ja_LSI"))
@@ -36,12 +37,12 @@ class APIConfig(BaseModel):
 
 
 class AgentConfig(BaseModel):
-    """Root agent configuration following ADK patterns."""
+    """Root agent configuration following ADK patterns - UPDATED for Phase 1."""
     
     # Basic agent info
     name: str = "ResDexRootAgent"
-    version: str = "1.0.0"
-    description: str = "AI-powered candidate search and filtering system"
+    version: str = "2.0.0"  # Updated for Phase 1
+    description: str = "AI-powered orchestrator for specialized candidate search agents"
     
     # Sub-configuration objects
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
@@ -59,25 +60,63 @@ class AgentConfig(BaseModel):
     ui_max_candidates_display: int = 20
     ui_max_skills_display: int = 15
     
-    # Sub-agent configurations
+    # UPDATED: Sub-agent configurations for Phase 1
     sub_agent_configs: Dict[str, Dict[str, Any]] = Field(default_factory=lambda: {
         "search_interaction": {
             "enabled": True,
             "priority": 1,
+            "description": "Handle filter operations and candidate search",
             "max_modifications_per_request": 5,
-            "enable_auto_search": True
+            "enable_auto_search": True,
+            "features": ["filter_operations", "candidate_search", "result_sorting"]
         },
-        "skill_expansion": {
-            "enabled": False,  # Will be enabled in future
+        "expansion": {
+            "enabled": True,  # NEW: Enable ExpansionAgent
             "priority": 2,
+            "description": "Handle skill, location, and title expansion",
+            "max_skills_expansion": 5,
+            "max_locations_expansion": 4,
+            "max_titles_expansion": 3,
+            "features": ["skill_expansion", "location_expansion", "title_expansion"]
+        },
+        "general_query": {
+            "enabled": True,  # NEW: Enable GeneralQueryAgent
+            "priority": 3,
+            "description": "Handle conversational queries and explanations",
+            "conversation_temperature": 0.7,
+            "max_response_length": 1000,
+            "features": ["conversational_ai", "help_system", "memory_queries"]
+        },
+        # Future agents (disabled for now)
+        "skill_expansion": {
+            "enabled": False,  # Will be part of expansion agent
+            "priority": 4,
             "max_suggestions": 10,
             "clustering_threshold": 0.7
         },
         "query_refinement": {
-            "enabled": False,  # Will be enabled in future
-            "priority": 3,
+            "enabled": False,  # Future enhancement
+            "priority": 5,
             "auto_apply_threshold": 0.8
         }
+    })
+    
+    # NEW: Agent routing configuration
+    routing_config: Dict[str, Any] = Field(default_factory=lambda: {
+        "enable_intelligent_routing": True,
+        "enable_agent_chaining": True,
+        "max_chain_length": 3,
+        "routing_confidence_threshold": 0.7,
+        "fallback_agent": "search_interaction"
+    })
+    
+    # NEW: Memory configuration
+    memory_config: Dict[str, Any] = Field(default_factory=lambda: {
+        "enable_memory": True,
+        "memory_type": "InMemoryMemoryService",
+        "max_memory_entries_per_user": 500,
+        "session_timeout_hours": 24,
+        "enable_cross_session_memory": True
     })
     
     @classmethod
@@ -93,19 +132,38 @@ class AgentConfig(BaseModel):
         """Check if a sub-agent is enabled."""
         return self.get_sub_agent_config(agent_name).get("enabled", False)
     
+    def get_enabled_agents(self) -> List[str]:
+        """Get list of enabled sub-agent names."""
+        return [
+            name for name, config in self.sub_agent_configs.items() 
+            if config.get("enabled", False)
+        ]
+    
+    def get_agent_priority(self, agent_name: str) -> int:
+        """Get priority of a specific agent."""
+        return self.get_sub_agent_config(agent_name).get("priority", 999)
+    
+    def get_routing_config(self) -> Dict[str, Any]:
+        """Get routing configuration."""
+        return self.routing_config
+    
+    def get_memory_config(self) -> Dict[str, Any]:
+        """Get memory configuration."""
+        return self.memory_config
+    
     def model_post_init(self, __context):
         """Post-initialization validation to ensure Qwen is configured."""
         import logging
         logger = logging.getLogger(__name__)
         
         # Log the actual LLM configuration being used
-        logger.info("=== LLM CONFIGURATION LOADED ===")
-        logger.info(f"API Key: {self.llm.api_key}")
-        logger.info(f"Base URL: {self.llm.base_url}")
-        logger.info(f"Model: {self.llm.model}")
-        logger.info(f"Temperature: {self.llm.temperature}")
-        logger.info(f"Max Tokens: {self.llm.max_tokens}")
-        logger.info("=== END LLM CONFIG ===")
+        logger.info("=== PHASE 1 AGENT CONFIGURATION ===")
+        logger.info(f"Root Agent: {self.name} v{self.version}")
+        logger.info(f"Enabled Agents: {self.get_enabled_agents()}")
+        logger.info(f"LLM Model: {self.llm.model}")
+        logger.info(f"Memory Enabled: {self.memory_config['enable_memory']}")
+        logger.info(f"Intelligent Routing: {self.routing_config['enable_intelligent_routing']}")
+        logger.info("=== END CONFIGURATION ===")
         
         # Validate Qwen configuration
         if not self.llm.base_url or self.llm.base_url == "":
@@ -118,7 +176,96 @@ class AgentConfig(BaseModel):
         
         if "qwen" not in self.llm.model.lower():
             logger.warning(f"⚠️ Model name doesn't contain 'Qwen': {self.llm.model}")
+        
+        # Validate enabled agents
+        enabled_agents = self.get_enabled_agents()
+        if not enabled_agents:
+            logger.warning("⚠️ No sub-agents enabled!")
+        else:
+            logger.info(f"✅ Phase 1 agents enabled: {enabled_agents}")
 
 
 # Global configuration instance
 config = AgentConfig.from_env()
+
+
+# NEW: Agent registry for dynamic agent management
+class AgentRegistry:
+    """Registry for managing available agents."""
+    
+    def __init__(self, config: AgentConfig):
+        self.config = config
+        self._agent_classes = {}
+        self._register_default_agents()
+    
+    def _register_default_agents(self):
+        """Register default Phase 1 agents."""
+        try:
+            # SearchInteractionAgent
+            from .sub_agents.search_interaction.agent import SearchInteractionAgent
+            from .sub_agents.search_interaction.config import SearchInteractionConfig
+            self._agent_classes["search_interaction"] = {
+                "class": SearchInteractionAgent,
+                "config_class": SearchInteractionConfig
+            }
+            
+            # ExpansionAgent
+            from .sub_agents.expansion.agent import ExpansionAgent
+            from .sub_agents.expansion.config import ExpansionConfig
+            self._agent_classes["expansion"] = {
+                "class": ExpansionAgent,
+                "config_class": ExpansionConfig
+            }
+            
+            # GeneralQueryAgent
+            from .sub_agents.general_query.agent import GeneralQueryAgent
+            from .sub_agents.general_query.config import GeneralQueryConfig
+            self._agent_classes["general_query"] = {
+                "class": GeneralQueryAgent,
+                "config_class": GeneralQueryConfig
+            }
+            
+        except ImportError as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Some agents not available during registration: {e}")
+    
+    def get_available_agents(self) -> List[str]:
+        """Get list of available agent names."""
+        return list(self._agent_classes.keys())
+    
+    def is_agent_available(self, agent_name: str) -> bool:
+        """Check if agent is available."""
+        return agent_name in self._agent_classes
+    
+    def create_agent(self, agent_name: str):
+        """Create an instance of the specified agent."""
+        if not self.is_agent_available(agent_name):
+            raise ValueError(f"Agent '{agent_name}' not available")
+        
+        agent_info = self._agent_classes[agent_name]
+        agent_class = agent_info["class"]
+        config_class = agent_info["config_class"]
+        
+        # Create agent with its specific config
+        agent_config = config_class()
+        return agent_class(agent_config)
+    
+    def get_enabled_agent_instances(self) -> Dict[str, Any]:
+        """Get instances of all enabled agents."""
+        enabled_agents = {}
+        
+        for agent_name in self.config.get_enabled_agents():
+            if self.is_agent_available(agent_name):
+                try:
+                    enabled_agents[agent_name] = self.create_agent(agent_name)
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Failed to create agent '{agent_name}': {e}")
+        
+        return enabled_agents
+
+
+# Global agent registry
+agent_registry = AgentRegistry(config)

@@ -52,4 +52,6 @@ logs/
 .coverage
 htmlcov/
 .pytest_cache/
-.mypy_cache/
+.mypy_cache/venv/
+__pycache__/
+*.whl
