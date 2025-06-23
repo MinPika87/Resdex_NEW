@@ -257,7 +257,7 @@ class LLMTool(Tool):
     
     def _build_intent_extraction_prompt(self, current_filters: Dict[str, Any]) -> str:
         """Build system prompt for intent extraction."""
-        return f"""You are a JSON extraction assistant for a job candidate search system. Extract search filter modifications from user requests.
+        return f"""You are a JSON extraction assistant for a job candidate search system.   
 
 Current filters:
 - Keywords: {current_filters.get('keywords', [])}
@@ -270,7 +270,27 @@ CRITICAL RULES:
 1. Return ONLY valid JSON - no explanations, no <think> tags, no extra text
 2. For single action: return one object
 3. For multiple actions: return array of objects
-4. When user says "search with X..." treat ALL actions as part of ONE search command
+4. **SEARCH EXECUTION**: When user says "execute search", "search now", "trigger search", etc.
+SEARCH EXECUTION SPECIAL HANDLING:
+If user request contains search execution keywords like:
+- "execute search", "trigger search", "search now", "run search"
+- "find candidates", "show results", "get candidates"
+
+Return:
+{{
+    "action": "search_execution",
+    "filter_type": "search",
+    "operation": "execute",
+    "value": "current_criteria",
+    "mandatory": false,
+    "response_text": "Executing search with current criteria",
+    "trigger_search": true
+}}
+
+EXAMPLES:
+"execute search with updated criteria" → {{"action": "search_execution", "response_text": "Executing search with current criteria", "trigger_search": true}}
+"search now" → {{"action": "search_execution", "response_text": "Executing search", "trigger_search": true}}
+"find candidates" → {{"action": "search_execution", "response_text": "Finding candidates with current filters", "trigger_search": true}}
 
 ACTION TYPES:
 - add_skill: Add a keyword/skill
@@ -340,6 +360,7 @@ Output: [
 
 Return ONLY the JSON response."""
     
+    # In resdex_agent/tools/llm_tools.py
     def _clean_llm_response(self, response: str) -> str:
         import re
         import json
@@ -348,35 +369,44 @@ Return ONLY the JSON response."""
         cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL | re.IGNORECASE)
         cleaned = cleaned.strip()
         
-        # Try to find and validate JSON
-        # Look for array first [...]
-        array_pattern = r'\[[\s\S]*?\]'
-        array_match = re.search(array_pattern, cleaned)
-        if array_match:
-            json_text = array_match.group(0).strip()
-            try:
-                # Validate it's proper JSON
-                json.loads(json_text)
-                return json_text
-            except json.JSONDecodeError:
-                pass
+        # ENHANCED: Try multiple JSON extraction patterns
+        patterns = [
+            # Multi-intent specific pattern (PRIORITY 1)
+            r'\{[\s\S]*?"is_multi_intent"[\s\S]*?"reasoning":\s*"[^"]*"[\s\S]*?\}',
+            # Array pattern for skill expansion
+            r'\[[\s\S]*?\]',
+            # General object pattern
+            r'\{[\s\S]*?\}'
+        ]
         
-        # Then try to find object {...}
-        object_pattern = r'\{[\s\S]*?\}'
-        object_match = re.search(object_pattern, cleaned)
-        if object_match:
-            json_text = object_match.group(0).strip()
-            try:
-                # Validate it's proper JSON
-                json.loads(json_text)
-                return json_text
-            except json.JSONDecodeError:
-                pass
+        for pattern in patterns:
+            matches = re.findall(pattern, cleaned, re.MULTILINE | re.DOTALL)
+            for match in matches:
+                try:
+                    match_clean = match.strip()
+                    # Remove trailing commas
+                    match_clean = re.sub(r',(\s*[}\]])', r'\1', match_clean)
+                    
+                    parsed = json.loads(match_clean)
+                    
+                    # CRITICAL: Validate response type
+                    if isinstance(parsed, dict):
+                        # Multi-intent response
+                        if "is_multi_intent" in parsed:
+                            print(f"✅ FOUND MULTI-INTENT OBJECT: {parsed}")
+                            return match_clean
+                        # Other object types
+                        else:
+                            return match_clean
+                    elif isinstance(parsed, list):
+                        return match_clean
+                            
+                except json.JSONDecodeError as e:
+                    print(f"❌ JSON parse failed for pattern: {e}")
+                    continue
         
-        # If no valid JSON found, return cleaned text
         print(f"⚠️ No valid JSON found in response: {cleaned[:200]}...")
         return cleaned
-    
     def _default_intent_response(self, user_input: str) -> Dict[str, Any]:
         """Return default intent response when Qwen fails."""
         return {

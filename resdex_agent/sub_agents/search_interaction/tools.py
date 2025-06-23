@@ -60,7 +60,14 @@ class IntentProcessor(Tool):
         trigger_search = intent_data.get("trigger_search", False)
         
         print(f"🔍 Processing single intent: action={action}, trigger_search={trigger_search}")
-        
+        if action == "search_execution":
+            print(f"🚀 SEARCH EXECUTION DETECTED")
+            return {
+                "success": True,
+                "message": "Search execution triggered",
+                "modifications": ["search_executed"],
+                "trigger_search": True  # Force search execution
+            }
         # Import filter tool here to avoid circular imports
         from ...tools.filter_tools import FilterTool
         filter_tool = FilterTool()

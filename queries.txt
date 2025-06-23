@@ -1,37 +1,55 @@
-Show me candidates with python
-Experience atleast 5
-chennai ones?
-Salary 8-15 lpa
-Candidates from major Tech Cities
-Make react permanent
-From BLR
-Freshers?
-add java
-Java,python and from BLR
-Search python as you did react
-same filters, add noida
-Include spring boot
-set same salary range
-mark all the optional locations to mandatory
-Use the previous filters, but make experience flexible.
-Dont change the filters , just add that candidates must be active recently.
-Add "Go" with the skills we had already
-keep same filters, increase salary by 5
-Bring in the cities we used in the last Bangalore search.
-Exp 3+, form mumbai and pune
-React, node and increase salary by 5
-people from delhi and nearby
-I want engineers with Python who are based near Hyderabad.
-Search for frontend developers earning between 10 and 20 LPA.
-Im hiring backend devs in NCR with Django and Postgres.
-Show profiles of Android developers from nearby Noida areas.
-Give me recently active people in Chennai with 3+ years of experience.
-Im hiring data engineers with Spark from Bangalore or nearby.
-I need DevOps folks with 5+ years earning above 15 LPA.
-Repeat the search we did for frontend folks last week, but for Pune this time.
-Take the same skills we added before and just add Angular and add some nearby locations to Delhi
-Start from the same filters, but narrow to profiles active this month.
-Use our earlier Bangalore search, increase salary by 5.
-keep filters same but canidates from BLR and Lucknow
-Find candidates like before but with more experience.
-Resume the last search and add Delhi-NCR nearby.
+# SINGLE TOOL - NO MEMORY (10 queries)
+# Each query tests one operation with fresh state
+
+1. Show me Python developers
+2. I need 5+ years experience
+3. Salary range 8-15 LPA please
+4. Find candidates in Bangalore
+5. Similar skills to React?
+6. Locations near Mumbai
+7. Search for profiles now
+8. Need Java developers
+9. Experience atleast 3 years
+10. Budget is 10-20 lakhs
+
+# SINGLE TOOL - WITH MEMORY (10 queries)  
+# Each query builds on previous state in sequence
+
+11. Also add Node.js skills
+12. Remove Python from search
+13. Increase experience to 7 years
+14. Add Chennai location too
+15. Make React mandatory skill
+16. Also check Pune candidates
+17. Reduce salary to 12 lakhs max
+18. Add Spring Boot skill
+19. Remove Bangalore from list
+20. Search with current filters
+
+# MULTI TOOL - NO MEMORY (10 queries)
+# Each query involves multiple operations with fresh state
+
+21. Python developers in Bangalore with 5+ years
+22. React and Node.js profiles near Mumbai, 8-15 LPA
+23. Java experts in Chennai, experience 3-7 years, search now
+24. Find similar skills to Python, locations near Delhi
+25. DevOps engineers 6+ years, Hyderabad area, 15-25 lakhs
+26. Frontend developers with React, Pune/Mumbai, immediate search
+27. Backend developers, Java/Spring, Bangalore nearby, 4+ years
+28. Full stack profiles, salary 12-18 LPA, NCR region
+29. Data scientists near Hyderabad, 5+ experience, search
+30. Angular developers in tech cities, 3-8 years, 10-20 LPA
+
+# MULTI TOOL - WITH MEMORY (10 queries)
+# Each query builds on accumulated state with multiple operations
+
+31. Add Angular skills and increase salary to 20 lakhs
+32. Include Kolkata locations and reduce experience to 2 years  
+33. Remove old skills, add AI/ML, search in current cities
+34. Add Docker skills, include NCR locations, search immediately
+35. Change salary to 15-30 lakhs, add Gurgaon, remove Chennai
+36. Include cloud skills, expand to nearby tech hubs, search
+37. Add mobile development skills and tier-1 cities
+38. Modify experience 8+ years, include fintech skills, search now
+39. Add remote locations, include consulting skills, higher budget
+40. Final search with DevOps skills in all current locations

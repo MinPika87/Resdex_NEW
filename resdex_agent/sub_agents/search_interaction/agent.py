@@ -144,6 +144,9 @@ class SearchInteractionAgent(BaseResDexAgent):
             print(f"🔧 FILTER OPERATION: Processing '{user_input}'")
             
             # Validate user input
+            if self._is_search_execution_request(user_input):
+                print(f"🔍 DETECTED SEARCH EXECUTION REQUEST")
+                return await self._handle_search_execution(user_input, session_state, session_id)
             validation_result = await self.tools["validation_tool"](
                 validation_type="user_input",
                 data=user_input
@@ -229,7 +232,83 @@ class SearchInteractionAgent(BaseResDexAgent):
                 "session_state": session_state,
                 "trigger_search": False
             })
-    
+    def _is_search_execution_request(self, user_input: str) -> bool:
+        """Check if the request is asking to execute search."""
+        search_keywords = [
+            "execute search", "trigger search", "search with", "search now",
+            "run search", "perform search", "start search", "find candidates",
+            "show results", "get candidates", "search", "show me", "find", "Show", "show now", "update"
+        ]
+        
+        input_lower = user_input.lower()
+        return any(keyword in input_lower for keyword in search_keywords)
+    async def _handle_search_execution(self, user_input: str, session_state: Dict[str, Any], 
+                                 session_id: str) -> Content:
+        """Handle direct search execution requests."""
+        try:
+            print(f"🚀 EXECUTING SEARCH with current filters")
+            
+            # Use current session state as search filters
+            search_filters = {
+                'keywords': session_state.get('keywords', []),
+                'min_exp': session_state.get('min_exp', 0),
+                'max_exp': session_state.get('max_exp', 10),
+                'min_salary': session_state.get('min_salary', 0),
+                'max_salary': session_state.get('max_salary', 15),
+                'current_cities': session_state.get('current_cities', []),
+                'preferred_cities': session_state.get('preferred_cities', []),
+                'recruiter_company': session_state.get('recruiter_company', 'ResDex'),
+                'max_candidates': 50  # Default candidate limit
+            }
+            
+            print(f"🔍 SEARCH FILTERS: {search_filters}")
+            
+            # Execute search using search tool
+            search_result = await self.tools["search_tool"](search_filters=search_filters)
+            
+            if search_result["success"]:
+                candidates = search_result.get("candidates", [])
+                total_count = search_result.get("total_count", 0)
+                
+                # Update session state with results
+                session_state['candidates'] = candidates
+                session_state['total_results'] = total_count
+                session_state['page'] = 0
+                
+                message = f"✅ Search executed successfully! Found {len(candidates)} candidates from {total_count:,} total matches."
+                
+                return self.create_content({
+                    "success": True,
+                    "message": message,
+                    "modifications": ["search_executed"],
+                    "session_state": session_state,
+                    "trigger_search": True,  # Indicate search was executed
+                    "search_results": {
+                        "candidates": candidates,
+                        "total_count": total_count,
+                        "displayed_count": len(candidates)
+                    },
+                    "operation": "search_execution"
+                })
+            else:
+                return self.create_content({
+                    "success": False,
+                    "error": f"Search execution failed: {search_result.get('error', 'Unknown error')}",
+                    "modifications": [],
+                    "session_state": session_state,
+                    "trigger_search": False
+                })
+                
+        except Exception as e:
+            logger.error(f"Search execution failed: {e}")
+            return self.create_content({
+                "success": False,
+                "error": f"Search execution failed: {str(e)}",
+                "modifications": [],
+                "session_state": session_state,
+                "trigger_search": False
+            })
+        
     async def _handle_candidate_operations(self, user_input: str, session_state: Dict[str, Any],
                                          intent_data: Dict[str, Any]) -> Optional[Content]:
         """Handle operations on existing candidates (sorting, filtering, etc.)."""

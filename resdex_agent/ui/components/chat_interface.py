@@ -3,7 +3,7 @@
 Chat interface component with Memory Integration and LIVE step streaming
 """
 
-import streamlit as st
+import streamlit as st #type: ignore
 import asyncio
 import time
 import uuid

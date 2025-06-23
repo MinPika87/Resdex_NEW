@@ -1,0 +1,94 @@
+# GROUND TRUTH FOR RESDEX BUSINESS QUERIES
+# Format: Query_ID: Expected_JSON_Changes
+
+# SINGLE TOOL - NO MEMORY (1-10)
+# Fresh state for each query
+
+1: {"keywords": {"added": ["Python"], "removed": [], "final": ["Python"]}}
+
+2: {"experience": {"initial": "0-10", "final": "5-10"}}
+
+3: {"salary": {"initial": "0-15", "final": "8-15"}}
+
+4: {"locations": {"current_added": ["Bangalore"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Bangalore"], "final_preferred": []}}
+
+5: {"keywords": {"added": ["React", "JavaScript", "TypeScript", "Redux", "Next.js"], "removed": [], "final": ["React", "JavaScript", "TypeScript", "Redux", "Next.js"]}}
+
+6: {"locations": {"current_added": ["Mumbai", "Pune", "Thane", "Nashik"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Mumbai", "Pune", "Thane", "Nashik"], "final_preferred": []}}
+
+7: {"search_executed": true}
+
+8: {"keywords": {"added": ["Java"], "removed": [], "final": ["Java"]}}
+
+9: {"experience": {"initial": "0-10", "final": "3-10"}}
+
+10: {"salary": {"initial": "0-15", "final": "10-20"}}
+
+# SINGLE TOOL - WITH MEMORY (11-20)
+# Each builds on previous state sequentially
+
+11: {"keywords": {"added": ["Node.js"], "removed": [], "final": ["Java", "Node.js"]}}
+
+12: {"keywords": {"added": [], "removed": ["Python"], "final": ["Java", "Node.js"]}}
+
+13: {"experience": {"initial": "3-10", "final": "7-10"}}
+
+14: {"locations": {"current_added": ["Chennai"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Mumbai", "Pune", "Thane", "Nashik", "Chennai"], "final_preferred": []}}
+
+15: {"keywords": {"added": ["★ React"], "removed": ["React"], "final": ["Java", "Node.js", "★ React"]}}
+
+16: {"locations": {"current_added": ["Pune"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Mumbai", "Pune", "Thane", "Nashik", "Chennai"], "final_preferred": []}}
+
+17: {"salary": {"initial": "10-20", "final": "10-12"}}
+
+18: {"keywords": {"added": ["Spring Boot"], "removed": [], "final": ["Java", "Node.js", "★ React", "Spring Boot"]}}
+
+19: {"locations": {"current_added": [], "current_removed": ["Bangalore"], "preferred_added": [], "preferred_removed": [], "final_current": ["Mumbai", "Pune", "Thane", "Nashik", "Chennai"], "final_preferred": []}}
+
+20: {"search_executed": true}
+
+# MULTI TOOL - NO MEMORY (21-30)
+# Fresh state, multiple operations per query
+
+21: {"keywords": {"added": ["Python"], "removed": [], "final": ["Python"]}, "locations": {"current_added": ["Bangalore"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Bangalore"], "final_preferred": []}, "experience": {"initial": "0-10", "final": "5-10"}}
+
+22: {"keywords": {"added": ["React", "Node.js"], "removed": [], "final": ["React", "Node.js"]}, "locations": {"current_added": ["Mumbai", "Pune", "Thane", "Nashik"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Mumbai", "Pune", "Thane", "Nashik"], "final_preferred": []}, "salary": {"initial": "0-15", "final": "8-15"}}
+
+23: {"keywords": {"added": ["Java"], "removed": [], "final": ["Java"]}, "locations": {"current_added": ["Chennai"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Chennai"], "final_preferred": []}, "experience": {"initial": "0-10", "final": "3-7"}, "search_executed": true}
+
+24: {"keywords": {"added": ["Python", "Django", "Flask", "FastAPI", "Pandas"], "removed": [], "final": ["Python", "Django", "Flask", "FastAPI", "Pandas"]}, "locations": {"current_added": ["Delhi", "Gurgaon", "Noida", "Faridabad"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Delhi", "Gurgaon", "Noida", "Faridabad"], "final_preferred": []}}
+
+25: {"keywords": {"added": ["DevOps"], "removed": [], "final": ["DevOps"]}, "experience": {"initial": "0-10", "final": "6-10"}, "locations": {"current_added": ["Hyderabad", "Secunderabad", "Warangal", "Nizamabad"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Hyderabad", "Secunderabad", "Warangal", "Nizamabad"], "final_preferred": []}, "salary": {"initial": "0-15", "final": "15-25"}}
+
+26: {"keywords": {"added": ["Frontend Developer", "React"], "removed": [], "final": ["Frontend Developer", "React"]}, "locations": {"current_added": ["Pune", "Mumbai"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Pune", "Mumbai"], "final_preferred": []}, "search_executed": true}
+
+27: {"keywords": {"added": ["Backend Developer", "Java", "Spring"], "removed": [], "final": ["Backend Developer", "Java", "Spring"]}, "locations": {"current_added": ["Bangalore", "Mysore", "Tumkur"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Bangalore", "Mysore", "Tumkur"], "final_preferred": []}, "experience": {"initial": "0-10", "final": "4-10"}}
+
+28: {"keywords": {"added": ["Full Stack"], "removed": [], "final": ["Full Stack"]}, "salary": {"initial": "0-15", "final": "12-18"}, "locations": {"current_added": ["Delhi", "Gurgaon", "Noida"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Delhi", "Gurgaon", "Noida"], "final_preferred": []}}
+
+29: {"keywords": {"added": ["Data Scientist"], "removed": [], "final": ["Data Scientist"]}, "locations": {"current_added": ["Hyderabad", "Secunderabad", "Warangal"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Hyderabad", "Secunderabad", "Warangal"], "final_preferred": []}, "experience": {"initial": "0-10", "final": "5-10"}, "search_executed": true}
+
+30: {"keywords": {"added": ["Angular"], "removed": [], "final": ["Angular"]}, "locations": {"current_added": ["Bangalore", "Mumbai", "Delhi", "Hyderabad"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Bangalore", "Mumbai", "Delhi", "Hyderabad"], "final_preferred": []}, "experience": {"initial": "0-10", "final": "3-8"}, "salary": {"initial": "0-15", "final": "10-20"}}
+
+# MULTI TOOL - WITH MEMORY (31-40)
+# Each builds on accumulated state from previous queries
+
+31: {"keywords": {"added": ["Angular"], "removed": [], "final": ["Angular", "DevOps", "Frontend Developer", "React", "Backend Developer", "Java", "Spring", "Full Stack", "Data Scientist", "Angular"]}, "salary": {"initial": "10-20", "final": "10-20"}}
+
+32: {"locations": {"current_added": ["Kolkata"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Bangalore", "Mumbai", "Delhi", "Hyderabad", "Kolkata"], "final_preferred": []}, "experience": {"initial": "3-8", "final": "2-8"}}
+
+33: {"keywords": {"added": ["AI", "ML", "Machine Learning"], "removed": ["Angular", "DevOps", "Frontend Developer"], "final": ["React", "Backend Developer", "Java", "Spring", "Full Stack", "Data Scientist", "AI", "ML", "Machine Learning"]}, "search_executed": true}
+
+34: {"keywords": {"added": ["Docker"], "removed": [], "final": ["React", "Backend Developer", "Java", "Spring", "Full Stack", "Data Scientist", "AI", "ML", "Machine Learning", "Docker"]}, "locations": {"current_added": ["Gurgaon", "Noida", "Faridabad"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Bangalore", "Mumbai", "Delhi", "Hyderabad", "Kolkata", "Gurgaon", "Noida", "Faridabad"], "final_preferred": []}, "search_executed": true}
+
+35: {"salary": {"initial": "10-20", "final": "15-30"}, "locations": {"current_added": ["Gurgaon"], "current_removed": ["Chennai"], "preferred_added": [], "preferred_removed": [], "final_current": ["Bangalore", "Mumbai", "Delhi", "Hyderabad", "Kolkata", "Gurgaon", "Noida", "Faridabad"], "final_preferred": []}}
+
+36: {"keywords": {"added": ["Cloud", "AWS", "Azure"], "removed": [], "final": ["React", "Backend Developer", "Java", "Spring", "Full Stack", "Data Scientist", "AI", "ML", "Machine Learning", "Docker", "Cloud", "AWS", "Azure"]}, "locations": {"current_added": ["Pune", "Chennai"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Bangalore", "Mumbai", "Delhi", "Hyderabad", "Kolkata", "Gurgaon", "Noida", "Faridabad", "Pune", "Chennai"], "final_preferred": []}, "search_executed": true}
+
+37: {"keywords": {"added": ["Mobile Development", "React Native", "Flutter"], "removed": [], "final": ["React", "Backend Developer", "Java", "Spring", "Full Stack", "Data Scientist", "AI", "ML", "Machine Learning", "Docker", "Cloud", "AWS", "Azure", "Mobile Development", "React Native", "Flutter"]}, "locations": {"current_added": ["Ahmedabad"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Bangalore", "Mumbai", "Delhi", "Hyderabad", "Kolkata", "Gurgaon", "Noida", "Faridabad", "Pune", "Chennai", "Ahmedabad"], "final_preferred": []}}
+
+38: {"experience": {"initial": "2-8", "final": "8-10"}, "keywords": {"added": ["Fintech"], "removed": [], "final": ["React", "Backend Developer", "Java", "Spring", "Full Stack", "Data Scientist", "AI", "ML", "Machine Learning", "Docker", "Cloud", "AWS", "Azure", "Mobile Development", "React Native", "Flutter", "Fintech"]}, "search_executed": true}
+
+39: {"locations": {"current_added": ["Remote"], "current_removed": [], "preferred_added": [], "preferred_removed": [], "final_current": ["Bangalore", "Mumbai", "Delhi", "Hyderabad", "Kolkata", "Gurgaon", "Noida", "Faridabad", "Pune", "Chennai", "Ahmedabad", "Remote"], "final_preferred": []}, "keywords": {"added": ["Consulting"], "removed": [], "final": ["React", "Backend Developer", "Java", "Spring", "Full Stack", "Data Scientist", "AI", "ML", "Machine Learning", "Docker", "Cloud", "AWS", "Azure", "Mobile Development", "React Native", "Flutter", "Fintech", "Consulting"]}, "salary": {"initial": "15-30", "final": "20-35"}}
+
+40: {"keywords": {"added": ["DevOps"], "removed": [], "final": ["React", "Backend Developer", "Java", "Spring", "Full Stack", "Data Scientist", "AI", "ML", "Machine Learning", "Docker", "Cloud", "AWS", "Azure", "Mobile Development", "React Native", "Flutter", "Fintech", "Consulting", "DevOps"]}, "search_executed": true}

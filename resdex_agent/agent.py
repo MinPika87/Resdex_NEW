@@ -269,7 +269,6 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         # If no agents available, use original logic
         return await self._execute_original_logic(content, session_id, user_id)
 
-
     async def _analyze_multi_intent_breakdown(self, user_input: str, session_state: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze if query has multiple intents and break them down."""
         
@@ -282,6 +281,12 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
     - Experience: {session_state.get('min_exp', 0)}-{session_state.get('max_exp', 10)} years
     - Current locations: {session_state.get('current_cities', [])}
 
+    CRITICAL AGENT ROUTING RULES:
+    1. **Skill Expansion**: If user mentions "similar skills to X" or "related skills" → target_agent: "expansion"
+    2. **Location Expansion**: If user mentions "nearby to X" or "similar locations" → target_agent: "expansion"  
+    3. **Filter Operations**: Experience/salary modifications → target_agent: "search_interaction"
+    4. **Search Execution**: Final search trigger → target_agent: "search_interaction"
+
     Break down the query into individual intents:
 
     {{
@@ -290,17 +295,23 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         "intents": [
             {{
                 "intent_id": 1,
-                "intent_type": "skill_operation|filter_operation|location_expansion|search_execution|general_conversation",
-                "target_agent": "search_interaction|expansion|general_query",
+                "intent_type": "skill_operation|filter_operation|location_expansion|search_execution",
+                "target_agent": "expansion|search_interaction",  // USE RULES ABOVE
                 "extracted_query": "specific query for this intent",
                 "execution_order": 1,
                 "description": "human readable description"
             }}
         ],
-        "execution_strategy": "sequential|parallel",
+        "execution_strategy": "sequential",
         "confidence": 0.0-1.0,
         "reasoning": "explanation of the breakdown"
     }}
+
+    EXAMPLES:
+    - "similar skills to Python" → {{"target_agent": "expansion", "intent_type": "skill_operation"}}
+    - "nearby to Mumbai" → {{"target_agent": "expansion", "intent_type": "location_expansion"}}
+    - "10+ years experience" → {{"target_agent": "search_interaction", "intent_type": "filter_operation"}}
+    - "execute search" → {{"target_agent": "search_interaction", "intent_type": "search_execution"}}
 
     Return ONLY the JSON response."""
 
@@ -364,7 +375,8 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             all_modifications = []
             all_messages = []
             execution_log = []
-            
+            final_result = None
+            search_executed = False
             # Sort intents by execution order
             sorted_intents = sorted(intents, key=lambda x: x.get('execution_order', 999))
             
@@ -400,7 +412,9 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
                     if result.data.get("success", False):
                         modifications = result.data.get("modifications", [])
                         all_modifications.extend(modifications)
-                        
+                        if "search_executed" in modifications:
+                            search_executed = True  
+                            final_result = result.data.get("search_results", {})
                         message = result.data.get("message", "")
                         if message:
                             all_messages.append(message)
@@ -426,22 +440,27 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             if session_id:
                 step_logger.log_step(f"🎯 Orchestration complete: {len(all_modifications)} total modifications", "orchestration")
             
-            return Content(data={
+            response_data = {
                 "success": True,
                 "message": combined_message,
                 "modifications": all_modifications,
-                "trigger_search": False,
+                "trigger_search": search_executed,
                 "session_state": session_state,
                 "orchestration_summary": {
                     "total_intents": total_intents,
                     "successful_intents": len([log for log in execution_log if "✅" in log]),
                     "failed_intents": len([log for log in execution_log if "❌" in log]),
                     "execution_log": execution_log,
-                    "original_query": user_input
+                    "original_query": user_input,
+                    "search_executed":search_executed
                 },
                 "type": "multi_intent_orchestrated"
-            })
-            
+            }
+            if final_result:
+                response_data["search_results"] = final_result
+        
+            return Content(data=response_data)
+        
         except Exception as e:
             logger.error(f"Multi-intent orchestration failed: {e}")
             return Content(data={
@@ -606,4 +625,3 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             logger.error(f"Failed to save session to memory: {e}")
 
 
-# Keep any other existing classes and functions from your original agent.py

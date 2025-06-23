@@ -83,7 +83,7 @@ class ExpansionAgent(BaseResDexAgent):
                 return await self._handle_multi_expansion(user_input, session_state, memory_context, session_id, user_id)
             else:
                 # Fallback to auto-detection
-                return await self._handle_auto_expansion(user_input, session_state, memory_context, session_id, user_id)
+                return await self   ._handle_auto_expansion(user_input, session_state, memory_context, session_id, user_id)
                 
         except Exception as e:
             logger.error(f"ExpansionAgent execution failed: {e}")
@@ -449,44 +449,73 @@ class ExpansionAgent(BaseResDexAgent):
         return ""
     
     def _extract_location_info(self, user_input: str, session_state: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract location and analysis type from user input."""
+        """Extract location and analysis type from user input with enhanced patterns."""
         input_lower = user_input.lower()
         
-        # Extract base location
+        # ENHANCED: More comprehensive location extraction patterns
         location_patterns = [
-            r"(?:to|near|around) ([a-zA-Z\s]+)",
-            r"locations? (?:to|like|similar to) ([a-zA-Z\s]+)",
-            r"cities? (?:to|like|similar to) ([a-zA-Z\s]+)"
+            r"nearby to ([a-zA-Z\s]+)",                    # "nearby to Hyderabad"
+            r"near ([a-zA-Z\s]+)",                         # "near Mumbai" 
+            r"around ([a-zA-Z\s]+)",                       # "around Delhi"
+            r"based (?:in|at|near) ([a-zA-Z\s]+)",        # "based in Bangalore"
+            r"(?:to|from) ([a-zA-Z\s]+)",                  # Generic "to Hyderabad"
+            r"locations? (?:to|like|similar to) ([a-zA-Z\s]+)"  # "locations similar to Chennai"
         ]
         
         base_location = ""
         import re
+        
         for pattern in location_patterns:
             match = re.search(pattern, input_lower)
             if match:
-                base_location = match.group(1).strip().title()
-                break
+                location_candidate = match.group(1).strip().title()
+                
+                # CRITICAL: Validate it's actually a city name, not a skill
+                if self._is_valid_city_name(location_candidate):
+                    base_location = location_candidate
+                    print(f"✅ EXTRACTED LOCATION: '{base_location}' using pattern: {pattern}")
+                    break
+                else:
+                    print(f"⚠️ REJECTED: '{location_candidate}' - not a valid city")
         
         # Fallback to session state
         if not base_location:
             current_cities = session_state.get('current_cities', [])
             if current_cities:
                 base_location = current_cities[-1]
+                print(f"🔄 FALLBACK TO SESSION STATE: {base_location}")
         
         # Determine analysis type
         analysis_type = "similar"
-        if "nearby" in input_lower or "close" in input_lower:
+        if "nearby" in input_lower or "close" in input_lower or "near" in input_lower:
             analysis_type = "nearby"
         elif "tech hub" in input_lower or "it hub" in input_lower:
             analysis_type = "industry_hubs"
-        elif "metro" in input_lower:
-            analysis_type = "metro_area"
+        
+        print(f"🎯 FINAL LOCATION EXTRACTION: base='{base_location}', type='{analysis_type}'")
         
         return {
             "base_location": base_location,
             "analysis_type": analysis_type
         }
-    
+
+    def _is_valid_city_name(self, candidate: str) -> bool:
+        """Check if the candidate is a valid city name."""
+        from ...utils.constants import CITIES, TECH_SKILLS
+        
+        # Check against known cities
+        if candidate in CITIES:
+            return True
+        
+        # Check if it's obviously a tech skill (to avoid confusion)
+        if candidate in TECH_SKILLS:
+            return False
+        
+        # Check length and format (cities are usually 2+ words or meaningful names)
+        if len(candidate) >= 3 and candidate.replace(' ', '').isalpha():
+            return True
+        
+        return False
     def _extract_base_title(self, user_input: str, session_state: Dict[str, Any]) -> str:
         """Extract base job title from user input."""
         input_lower = user_input.lower()
@@ -507,28 +536,23 @@ class ExpansionAgent(BaseResDexAgent):
         
         return ""
     
+    # In resdex_agent/sub_agents/expansion/agent.py
     async def _expand_skills_with_llm(self, base_skill: str, memory_context: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Use LLM to expand skills."""
+        """Use LLM to expand skills with robust parsing."""
         prompt = f"""You are a skills expansion expert. Find 4-5 related/similar skills to "{base_skill}" for tech recruitment.
 
-Base Skill: {base_skill}
+    Base Skill: {base_skill}
 
-Consider:
-1. Technical skills in the same domain
-2. Complementary technologies  
-3. Skills commonly found together
-4. Both specific and general variations
+    CRITICAL: Return ONLY valid JSON in this EXACT format:
+    {{
+        "base_skill": "{base_skill}",
+        "expanded_skills": ["skill1", "skill2", "skill3", "skill4"],
+        "reasoning": "brief explanation"
+    }}
 
-Return ONLY JSON:
-{{
-    "base_skill": "{base_skill}",
-    "expanded_skills": ["skill1", "skill2", "skill3", "skill4"],
-    "reasoning": "brief explanation"
-}}
-
-Examples:
-Python → ["Django", "Flask", "FastAPI", "Pandas", "NumPy"]
-React → ["JavaScript", "TypeScript", "Redux", "Next.js", "Node.js"]"""
+    Examples:
+    Python → {{"base_skill": "Python", "expanded_skills": ["Django", "Flask", "FastAPI", "Pandas"], "reasoning": "Web frameworks and data science tools"}}
+    React → {{"base_skill": "React", "expanded_skills": ["JavaScript", "TypeScript", "Redux", "Next.js"], "reasoning": "Core JS ecosystem and React frameworks"}}"""
 
         try:
             llm_result = await self.tools["llm_tool"]._call_llm_direct(
@@ -536,15 +560,53 @@ React → ["JavaScript", "TypeScript", "Redux", "Next.js", "Node.js"]"""
                 task="skill_expansion"
             )
             
-            if llm_result["success"] and "parsed_response" in llm_result:
-                return {
-                    "success": True,
-                    "expanded_skills": llm_result["parsed_response"].get("expanded_skills", [])
-                }
-            else:
-                # Fallback to simple mapping
-                return self._fallback_skill_expansion(base_skill)
+            if llm_result["success"]:
+                # ENHANCED: Handle both object and array responses
+                if "parsed_response" in llm_result and llm_result["parsed_response"]:
+                    parsed = llm_result["parsed_response"]
+                    
+                    # If it's the expected object format
+                    if isinstance(parsed, dict) and "expanded_skills" in parsed:
+                        return {
+                            "success": True,
+                            "expanded_skills": parsed["expanded_skills"]
+                        }
+                    # If LLM returned just the array
+                    elif isinstance(parsed, list):
+                        print(f"🔧 LLM returned array format, converting: {parsed}")
+                        return {
+                            "success": True,
+                            "expanded_skills": parsed
+                        }
                 
+                # Try manual parsing from response_text
+                elif "response_text" in llm_result:
+                    import json
+                    response_text = llm_result["response_text"].strip()
+                    
+                    # Try parsing as object first
+                    try:
+                        parsed = json.loads(response_text)
+                        if isinstance(parsed, dict) and "expanded_skills" in parsed:
+                            return {"success": True, "expanded_skills": parsed["expanded_skills"]}
+                        elif isinstance(parsed, list):
+                            return {"success": True, "expanded_skills": parsed}
+                    except json.JSONDecodeError:
+                        pass
+                    
+                    # Try extracting array pattern
+                    import re
+                    array_match = re.search(r'\[[\s\S]*?\]', response_text)
+                    if array_match:
+                        try:
+                            skills_array = json.loads(array_match.group(0))
+                            return {"success": True, "expanded_skills": skills_array}
+                        except json.JSONDecodeError:
+                            pass
+            
+            # Fallback
+            return self._fallback_skill_expansion(base_skill)
+                    
         except Exception as e:
             logger.error(f"LLM skill expansion failed: {e}")
             return self._fallback_skill_expansion(base_skill)
