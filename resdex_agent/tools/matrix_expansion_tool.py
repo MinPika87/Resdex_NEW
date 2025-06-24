@@ -35,6 +35,7 @@ class MatrixExpansionTool(Tool):
     
     # Shared matrix system instances
     _skill_convertor = None
+    _title_convertor = None
     _matrix_features = None
     _feature_matrix_loader = None
     _initialization_error = None
@@ -108,8 +109,18 @@ class MatrixExpansionTool(Tool):
                 print(f"⚠️ SkillConvertor import failed: {e}")
                 cls._skill_convertor = None
             
-            # Step 4: Verify MatrixFeatures has the required methods
-            print("🔍 Step 4: Verifying MatrixFeatures methods...")
+            # Step 4: NEW - Import TitleConvertor from taxonomy
+            try:
+                print("📦 Step 4: Importing TitleConvertor from taxonomy...")
+                from taxonomy.common_functions import TitleConvertor
+                cls._title_convertor = TitleConvertor()
+                print("✅ TitleConvertor imported from installed taxonomy package")
+            except ImportError as e:
+                print(f"⚠️ TitleConvertor import failed: {e}")
+                cls._title_convertor = None
+            
+            # Step 5: Verify MatrixFeatures has the required methods
+            print("🔍 Step 5: Verifying MatrixFeatures methods...")
             available_features = []
             
             if hasattr(cls._matrix_features, 'skillToSkillFeature'):
@@ -137,6 +148,7 @@ class MatrixExpansionTool(Tool):
             print(f"🔧 MatrixFeatures: ✅")
             print(f"🔧 FeatureMatrixLoader: {'✅' if cls._feature_matrix_loader else '❌'}")
             print(f"🔧 SkillConvertor: {'✅' if cls._skill_convertor else '❌ (will use fallback)'}")
+            print(f"🔧 TitleConvertor: {'✅' if cls._title_convertor else '❌ (will use fallback)'}")
             
             logger.info(f"Matrix expansion tool initialized with features: {available_features}")
             
@@ -149,27 +161,97 @@ class MatrixExpansionTool(Tool):
             # Set error for all instances
             cls._initialization_error = str(e)
             cls._skill_convertor = None
+            cls._title_convertor = None
             cls._matrix_features = None
             cls._feature_matrix_loader = None
+
     
     def _is_available(self) -> bool:
         """Check if matrix system is available."""
         return self._matrix_features is not None and self._initialization_error is None
     
     def _convert_skill_to_id(self, skill: str):
-        """Convert skill name to ID."""
+        """Convert skill name to ID using SkillConvertor (for skills only)."""
         if self._skill_convertor:
             try:
-                result = self._skill_convertor.convert(skill)
-                print(f"🔄 SkillConvertor: '{skill}' -> {result}")
-                return result
+                # Try multiple skill name variations
+                skill_variations = [
+                    skill,
+                    skill.lower(),
+                    skill.upper(),
+                    skill.title(),
+                    skill.replace(' ', '_'),
+                    skill.replace('_', ' ')
+                ]
+                
+                for variation in skill_variations:
+                    try:
+                        result = self._skill_convertor.convert(variation)
+                        if result and result != "UNKNOWN" and result is not None:
+                            print(f"🔄 SkillConvertor: '{skill}' (via '{variation}') -> {result}")
+                            return result
+                    except Exception as e:
+                        continue
+                
+                print(f"⚠️ SkillConvertor failed for all variations of '{skill}'")
             except Exception as e:
-                print(f"⚠️ SkillConvertor failed for '{skill}': {e}")
+                print(f"⚠️ SkillConvertor error for '{skill}': {e}")
         
-        # Fallback: use skill name directly
-        print(f"🔄 Fallback mapping: '{skill}' -> '{skill.lower()}'")
-        return skill.lower()
-    
+        # Fallback: use skill normalization
+        normalized_skill = self._normalize_skill_for_matrix(skill)
+        print(f"🔄 Skill fallback mapping: '{skill}' -> '{normalized_skill}'")
+        return normalized_skill
+
+    def _normalize_skill_for_matrix(self, skill: str) -> str:
+        """Normalize skill name for matrix lookup."""
+        if not skill:
+            return ""
+        
+        # Common skill normalizations for matrix system
+        skill_normalizations = {
+            'python': 'python',
+            'java': 'java',
+            'javascript': 'javascript', 
+            'react': 'reactjs',
+            'angular': 'angularjs',
+            'node.js': 'nodejs',
+            'sql': 'sql',
+            'html': 'html',
+            'css': 'css',
+            'machine learning': 'machine_learning',
+            'data science': 'data_science',
+            'artificial intelligence': 'ai',
+            'deep learning': 'deep_learning',
+            'tensorflow': 'tensorflow',
+            'pytorch': 'pytorch',
+            'pandas': 'pandas',
+            'numpy': 'numpy',
+            'scikit-learn': 'sklearn',
+            'django': 'django',
+            'flask': 'flask',
+            'fastapi': 'fastapi',
+            'spring': 'spring',
+            'hibernate': 'hibernate',
+            'aws': 'aws',
+            'docker': 'docker',
+            'kubernetes': 'kubernetes',
+            'jenkins': 'jenkins',
+            'git': 'git',
+            'mysql': 'mysql',
+            'postgresql': 'postgresql',
+            'mongodb': 'mongodb',
+            'redis': 'redis'
+        }
+        
+        skill_lower = skill.lower().strip()
+        
+        # Direct mapping
+        if skill_lower in skill_normalizations:
+            return skill_normalizations[skill_lower]
+        
+        # Fallback: clean the skill name
+        normalized = skill_lower.replace(' ', '_').replace('-', '_').replace('.', '')
+        return normalized
     def _convert_id_to_skill(self, skill_id):
         """Convert skill ID back to name."""
         if self._skill_convertor:
@@ -184,7 +266,7 @@ class MatrixExpansionTool(Tool):
         return str(skill_id).replace('_', ' ').title()
     
     def _extract_base_skills(self, user_input: str, session_state: Dict[str, Any]) -> List[str]:
-        """FIXED: Enhanced skill extraction from user input or session state."""
+        """FIXED: Enhanced skill extraction that properly captures multiple skills."""
         skills = []
         input_lower = user_input.lower()
         
@@ -192,50 +274,36 @@ class MatrixExpansionTool(Tool):
         print(f"  - Original input: '{user_input}'")
         print(f"  - Lowercase input: '{input_lower}'")
         
-        # FIXED: Enhanced skill extraction patterns with better regex
         skill_patterns = [
-            r"(?:skills?\s+(?:to|like|similar\s+to)\s+)([a-zA-Z+#.]+)(?:\s|$)",  # FIXED: Removed comma from character class
-            r"(?:expand\s+)([a-zA-Z+#.]+)(?:\s+skill)",
-            r"(?:similar\s+to\s+)([a-zA-Z+#.]+)(?:\s|$)",
-            r"(?:like\s+)([a-zA-Z+#.]+)(?:\s|$)",
-            r"(?:find\s+skills\s+(?:similar\s+to|like)\s+)([a-zA-Z+#.]+)(?:\s|$)",
-            r"(?:related\s+to\s+)([a-zA-Z+#.]+)(?:\s|$)"
+            # Pattern 1: "skills to X" - capture everything after "to"
+            r"(?:skills?\s+(?:to|like|similar\s+to)\s+)(.+?)(?:\s*$)",
+            # Pattern 2: "similar skills to X" - capture everything after "to"
+            r"(?:similar\s+skills?\s+to\s+)(.+?)(?:\s*$)",
+            # Pattern 3: "find skills similar to X" - capture everything after "to"
+            r"(?:find\s+skills?\s+(?:similar\s+to|like)\s+)(.+?)(?:\s*$)",
+            # Pattern 4: "expand X skills" - capture everything before "skills"
+            r"(?:expand\s+)(.+?)(?:\s+skills?)",
+            # Pattern 5: "like X" - capture everything after "like"
+            r"(?:like\s+)(.+?)(?:\s+(?:skill|programming|language|$))",
+            # Pattern 6: "related to X" - capture everything after "to"
+            r"(?:related\s+to\s+)(.+?)(?:\s+(?:skill|programming|language|$))"
         ]
         
         import re
         for i, pattern in enumerate(skill_patterns):
             print(f"  - Trying pattern {i+1}: {pattern}")
-            match = re.search(pattern, input_lower)
+            match = re.search(pattern, input_lower, re.IGNORECASE)
             if match:
                 skill_text = match.group(1).strip()
                 print(f"  ✅ Pattern {i+1} matched: '{skill_text}'")
                 
-                # FIXED: Don't split single words - they're already extracted correctly
-                if ' ' in skill_text or ',' in skill_text:
-                    # Only split if there are actually multiple skills
-                    skill_candidates = re.split(r'[,\s+and\s+]', skill_text)
-                    print(f"  - Split candidates: {skill_candidates}")
-                else:
-                    # Single skill - don't split
-                    skill_candidates = [skill_text]
-                    print(f"  - Single skill (no split): {skill_candidates}")
+                # FIXED: Parse multiple skills from the matched text
+                skills = self._parse_multiple_skills(skill_text)
+                print(f"  📝 Parsed skills: {skills}")
                 
-                for skill in skill_candidates:
-                    skill = skill.strip()
-                    print(f"    - Processing candidate: '{skill}'")
-                    
-                    # CRITICAL FIX: Better validation and cleaning
-                    if len(skill) > 1 and not skill in ['to', 'and', 'or', 'the', 'a', 'an']:
-                        # Clean up the skill name
-                        cleaned_skill = self._clean_skill_name(skill)
-                        if cleaned_skill:
-                            skills.append(cleaned_skill)
-                            print(f"    ✅ Added skill: '{cleaned_skill}'")
-                        else:
-                            print(f"    ❌ Rejected after cleaning: '{skill}'")
-                    else:
-                        print(f"    ❌ Rejected (too short or stop word): '{skill}'")
-                break
+                # Break after first successful match
+                if skills:
+                    break
         
         # If no skills found in input, check session state
         if not skills:
@@ -253,9 +321,51 @@ class MatrixExpansionTool(Tool):
         unique_skills = list(dict.fromkeys(skills))
         print(f"  📊 Final extracted skills: {unique_skills}")
         return unique_skills
-    
+
+    def _parse_multiple_skills(self, skill_text: str) -> List[str]:
+        """Parse multiple skills from text like 'figma and CAD' or 'python, java, react'."""
+        import re
+        
+        print(f"    🔍 Parsing multiple skills from: '{skill_text}'")
+        
+        # Clean up the input text first
+        skill_text = skill_text.strip()
+        
+        # Split on multiple separators while preserving multi-word skills
+        separators_pattern = r'\s+(?:and|or|,|\&)\s+'
+        
+        # Split the text using the pattern
+        potential_skills = re.split(separators_pattern, skill_text, flags=re.IGNORECASE)
+        
+        print(f"    🔧 Split candidates: {potential_skills}")
+        
+        # Clean and validate each skill
+        cleaned_skills = []
+        for skill in potential_skills:
+            skill = skill.strip()
+            
+            # Remove any trailing punctuation or words
+            skill = re.sub(r'\s+(?:skill|skills|programming|language|technology)$', '', skill, flags=re.IGNORECASE)
+            skill = skill.strip(' .,;')
+            
+            if skill and len(skill) > 1:
+                cleaned_skill = self._clean_skill_name(skill)
+                if cleaned_skill and len(cleaned_skill) > 1:
+                    # Additional validation: not common words
+                    if cleaned_skill.lower() not in ['and', 'or', 'the', 'a', 'an', 'to', 'for', 'with', 'in', 'on', 'at']:
+                        cleaned_skills.append(cleaned_skill)
+                        print(f"    ✅ Valid skill: '{cleaned_skill}'")
+                    else:
+                        print(f"    ❌ Rejected common word: '{cleaned_skill}'")
+                else:
+                    print(f"    ❌ Rejected after cleaning: '{skill}'")
+            else:
+                print(f"    ❌ Rejected too short: '{skill}'")
+        
+        return cleaned_skills
+
     def _clean_skill_name(self, skill: str) -> str:
-        """Clean and normalize skill name."""
+        """Clean and normalize skill name - ENHANCED."""
         if not skill:
             return ""
         
@@ -263,50 +373,310 @@ class MatrixExpansionTool(Tool):
         skill = skill.strip()
         
         # Remove trailing words that might be captured by regex
-        stop_suffixes = ['skill', 'skills', 'programming', 'language', 'technology']
+        stop_suffixes = ['skill', 'skills', 'programming', 'language', 'technology', 'tool', 'tools']
         for suffix in stop_suffixes:
-            if skill.lower().endswith(suffix):
-                skill = skill[:-len(suffix)].strip()
+            if skill.lower().endswith(f' {suffix}'):
+                skill = skill[:-len(suffix)-1].strip()
         
-        # Handle common skill name variations
+        # Handle common skill name variations and normalizations
         skill_mappings = {
-            'pytho': 'python',
-            'javascrip': 'javascript', 
-            'jav': 'java',
-            'reac': 'react',
-            'angula': 'angular',
-            'nod': 'node.js',
-            'sq': 'sql',
-            'htm': 'html',
-            'cs': 'css'
+            # Programming languages
+            'pytho': 'python', 'python': 'Python',
+            'javascrip': 'javascript', 'javascript': 'JavaScript', 'js': 'JavaScript',
+            'jav': 'java', 'java': 'Java',
+            'c++': 'C++', 'cpp': 'C++', 'c plus plus': 'C++',
+            'c#': 'C#', 'csharp': 'C#', 'c sharp': 'C#',
+            
+            # Design tools
+            'figma': 'Figma',
+            'sketch': 'Sketch', 
+            'adobe xd': 'Adobe XD', 'xd': 'Adobe XD',
+            'photoshop': 'Photoshop',
+            'illustrator': 'Illustrator',
+            'cad': 'CAD', 'autocad': 'AutoCAD',
+            
+            # Web technologies
+            'reac': 'react', 'react': 'React',
+            'angula': 'angular', 'angular': 'Angular',
+            'nod': 'node.js', 'node': 'Node.js', 'nodejs': 'Node.js',
+            'sql': 'SQL', 'mysql': 'MySQL', 'postgresql': 'PostgreSQL',
+            'htm': 'html', 'html': 'HTML',
+            'cs': 'css', 'css': 'CSS',
+            
+            # Other technologies
+            'aws': 'AWS', 'amazon web services': 'AWS',
+            'docker': 'Docker',
+            'kubernetes': 'Kubernetes', 'k8s': 'Kubernetes',
+            'jenkins': 'Jenkins',
+            'git': 'Git',
+            'mongodb': 'MongoDB', 'mongo': 'MongoDB',
+            'redis': 'Redis'
         }
         
-        skill_lower = skill.lower()
-        for partial, full in skill_mappings.items():
-            if skill_lower == partial:
-                print(f"    🔧 Skill mapping: '{skill}' -> '{full}'")
-                return full
+        skill_lower = skill.lower().strip()
         
-        # Final cleanup and capitalization
-        cleaned = skill.strip().title()
+        # Direct mapping
+        if skill_lower in skill_mappings:
+            return skill_mappings[skill_lower]
         
-        # Special cases for well-known skills
-        special_cases = {
-            'Python': 'Python',
-            'Javascript': 'JavaScript', 
-            'Java': 'Java',
-            'React': 'React',
-            'Angular': 'Angular',
-            'Node.Js': 'Node.js',
-            'Sql': 'SQL',
-            'Html': 'HTML',
-            'Css': 'CSS',
-            'Machine Learning': 'Machine Learning',
-            'Data Science': 'Data Science'
+        # Fallback: proper case the skill name
+        # Handle special cases for acronyms and camelCase
+        if skill_lower.isupper() or len(skill_lower) <= 3:
+            # Likely an acronym, keep uppercase
+            cleaned = skill.upper()
+        elif skill_lower.islower() and ' ' not in skill_lower:
+            # Single word, title case
+            cleaned = skill.title()
+        else:
+            # Multi-word, title case each word
+            cleaned = ' '.join(word.title() for word in skill.split())
+        
+        return cleaned
+    def _convert_title_to_id(self, title: str):
+        """Convert title name to ID using TitleConvertor."""
+        if self._title_convertor:
+            try:
+                # Try multiple title name variations
+                title_variations = [
+                    title,
+                    title.lower(),
+                    title.title(),
+                    title.replace(' ', '_'),
+                    title.replace('_', ' '),
+                    # Try common title variations
+                    title.replace(' Engineer', '').strip(),
+                    title.replace(' Developer', '').strip(),
+                    title.replace(' Manager', '').strip(),
+                    title.replace(' Scientist', '').strip(),
+                    title.replace(' Analyst', '').strip()
+                ]
+                
+                for variation in title_variations:
+                    try:
+                        result = self._title_convertor.convert(variation)
+                        if result and result != "UNKNOWN" and result is not None:
+                            print(f"🔄 TitleConvertor: '{title}' (via '{variation}') -> {result}")
+                            return result
+                    except Exception as e:
+                        continue
+                
+                print(f"⚠️ TitleConvertor failed for all variations of '{title}'")
+            except Exception as e:
+                print(f"⚠️ TitleConvertor error for '{title}': {e}")
+        
+        # Fallback: use title normalization
+        normalized_title = self._normalize_title_for_matrix(title)
+        print(f"🔄 Title fallback mapping: '{title}' -> '{normalized_title}'")
+        return normalized_title
+
+    def _convert_id_to_title(self, title_id):
+        """Convert title ID back to name using TitleConvertor."""
+        if self._title_convertor:
+            try:
+                result = self._title_convertor.convert(title_id)
+                if result and result != "UNKNOWN":
+                    return result
+            except Exception as e:
+                print(f"⚠️ TitleConvertor reverse failed for '{title_id}': {e}")
+        
+        # Fallback: use ID as name
+        return str(title_id).replace('_', ' ').title()
+
+    def _normalize_title_for_matrix(self, title: str) -> str:
+        """Normalize title name for matrix lookup."""
+        if not title:
+            return ""
+        
+        # Common title normalizations for matrix system
+        title_normalizations = {
+            'data scientist': 'data_scientist',
+            'software engineer': 'software_engineer', 
+            'software developer': 'software_developer',
+            'full stack developer': 'fullstack_developer',
+            'frontend developer': 'frontend_developer',
+            'backend developer': 'backend_developer',
+            'devops engineer': 'devops_engineer',
+            'ml engineer': 'ml_engineer',
+            'machine learning engineer': 'machine_learning_engineer',
+            'product manager': 'product_manager',
+            'project manager': 'project_manager',
+            'business analyst': 'business_analyst',
+            'data analyst': 'data_analyst',
+            'data engineer': 'data_engineer',
+            'ui designer': 'ui_designer',
+            'ux designer': 'ux_designer',
+            'product designer': 'product_designer',
+            'qa engineer': 'qa_engineer',
+            'test engineer': 'test_engineer',
+            'tech lead': 'tech_lead',
+            'team lead': 'team_lead',
+            'automation engineer': 'automation_engineer'
         }
         
-        return special_cases.get(cleaned, cleaned)
-    
+        title_lower = title.lower().strip()
+        
+        # Direct mapping
+        if title_lower in title_normalizations:
+            return title_normalizations[title_lower]
+        
+        # Fallback: clean the title name
+        normalized = title_lower.replace(' ', '_').replace('-', '_').replace('.', '')
+        return normalized
+    def _extract_base_titles(self, user_input: str, session_state: Dict[str, Any]) -> List[str]:
+        """FIXED: Enhanced title extraction that properly captures multiple titles."""
+        titles = []
+        input_lower = user_input.lower()
+        
+        print(f"🔍 TITLE EXTRACTION DEBUG:")
+        print(f"  - Original input: '{user_input}'")
+        print(f"  - Lowercase input: '{input_lower}'")
+        
+        # FIXED: Enhanced patterns that capture multiple titles
+        title_patterns = [
+            # Pattern 1: "titles to X" - capture everything after "to"
+            r"(?:titles?\s+(?:to|like|similar\s+to)\s+)(.+?)(?:\s*$)",
+            # Pattern 2: "similar titles to X" - capture everything after "to"
+            r"(?:similar\s+titles?\s+to\s+)(.+?)(?:\s*$)",
+            # Pattern 3: "find titles similar to X" - capture everything after "to"
+            r"(?:find\s+titles?\s+(?:similar\s+to|like)\s+)(.+?)(?:\s*$)",
+            # Pattern 4: "expand X titles" - capture everything before "titles"
+            r"(?:expand\s+)(.+?)(?:\s+titles?)",
+            # Pattern 5: "roles like X" - capture everything after "like"
+            r"(?:roles?\s+(?:like|similar\s+to)\s+)(.+?)(?:\s*$)",
+            # Pattern 6: "positions similar to X" - capture everything after "to"
+            r"(?:positions?\s+(?:similar\s+to|like)\s+)(.+?)(?:\s*$)"
+        ]
+        
+        import re
+        for i, pattern in enumerate(title_patterns):
+            print(f"  - Trying pattern {i+1}: {pattern}")
+            match = re.search(pattern, input_lower, re.IGNORECASE)
+            if match:
+                title_text = match.group(1).strip()
+                print(f"  ✅ Pattern {i+1} matched: '{title_text}'")
+                
+                # Parse multiple titles from the matched text
+                titles = self._parse_multiple_titles(title_text)
+                print(f"  📝 Parsed titles: {titles}")
+                
+                # Break after first successful match
+                if titles:
+                    break
+        
+        # If no titles found in input, check session state
+        if not titles:
+            print(f"  - No titles found in input, checking session state...")
+            # Could check for current job titles in session if we track them
+            # For now, return empty
+        
+        # Remove duplicates while preserving order
+        unique_titles = list(dict.fromkeys(titles))
+        print(f"  📊 Final extracted titles: {unique_titles}")
+        return unique_titles
+
+    def _parse_multiple_titles(self, title_text: str) -> List[str]:
+        """Parse multiple titles from text like 'data scientist and software engineer'."""
+        import re
+        
+        print(f"    🔍 Parsing multiple titles from: '{title_text}'")
+        
+        # Clean up the input text first
+        title_text = title_text.strip()
+        
+        # Split on multiple separators while preserving multi-word titles
+        separators_pattern = r'\s+(?:and|or|,|\&)\s+'
+        
+        # Split the text using the pattern
+        potential_titles = re.split(separators_pattern, title_text, flags=re.IGNORECASE)
+        
+        print(f"    🔧 Split candidates: {potential_titles}")
+        
+        # Clean and validate each title
+        cleaned_titles = []
+        for title in potential_titles:
+            title = title.strip()
+            
+            # Remove any trailing punctuation or words
+            title = re.sub(r'\s+(?:role|roles|position|positions|job|jobs)$', '', title, flags=re.IGNORECASE)
+            title = title.strip(' .,;')
+            
+            if title and len(title) > 2:  # Titles are usually longer than skills
+                cleaned_title = self._clean_title_name(title)
+                if cleaned_title and len(cleaned_title) > 2:
+                    # Additional validation: not common words
+                    if cleaned_title.lower() not in ['and', 'or', 'the', 'a', 'an', 'to', 'for', 'with', 'in', 'on', 'at', 'role', 'position']:
+                        cleaned_titles.append(cleaned_title)
+                        print(f"    ✅ Valid title: '{cleaned_title}'")
+                    else:
+                        print(f"    ❌ Rejected common word: '{cleaned_title}'")
+                else:
+                    print(f"    ❌ Rejected after cleaning: '{title}'")
+            else:
+                print(f"    ❌ Rejected too short: '{title}'")
+        
+        return cleaned_titles
+
+    def _clean_title_name(self, title: str) -> str:
+        """Clean and normalize title name."""
+        if not title:
+            return ""
+        
+        # Remove common suffixes and clean
+        title = title.strip()
+        
+        # Remove trailing words that might be captured by regex
+        stop_suffixes = ['role', 'roles', 'position', 'positions', 'job', 'jobs']
+        for suffix in stop_suffixes:
+            if title.lower().endswith(f' {suffix}'):
+                title = title[:-len(suffix)-1].strip()
+        
+        # Handle common title name variations and normalizations
+        title_mappings = {
+            # Tech roles
+            'data scientist': 'Data Scientist',
+            'software engineer': 'Software Engineer', 
+            'software developer': 'Software Developer',
+            'full stack developer': 'Full Stack Developer',
+            'frontend developer': 'Frontend Developer',
+            'backend developer': 'Backend Developer',
+            'devops engineer': 'DevOps Engineer',
+            'ml engineer': 'ML Engineer',
+            'machine learning engineer': 'Machine Learning Engineer',
+            
+            # Design roles
+            'ui designer': 'UI Designer',
+            'ux designer': 'UX Designer',
+            'product designer': 'Product Designer',
+            'graphic designer': 'Graphic Designer',
+            
+            # Management roles
+            'product manager': 'Product Manager',
+            'project manager': 'Project Manager',
+            'tech lead': 'Tech Lead',
+            'team lead': 'Team Lead',
+            
+            # Data roles
+            'data analyst': 'Data Analyst',
+            'business analyst': 'Business Analyst',
+            'data engineer': 'Data Engineer',
+            
+            # QA roles
+            'qa engineer': 'QA Engineer',
+            'test engineer': 'Test Engineer',
+            'automation engineer': 'Automation Engineer'
+        }
+        
+        title_lower = title.lower().strip()
+        
+        # Direct mapping
+        if title_lower in title_mappings:
+            return title_mappings[title_lower]
+        
+        # Fallback: proper case the title name
+        # Title case each word for professional titles
+        cleaned = ' '.join(word.title() for word in title.split())
+        
+        return cleaned
     async def __call__(self, 
                       expansion_type: str,
                       base_items: List[str],
@@ -357,7 +727,7 @@ class MatrixExpansionTool(Tool):
             }
     
     async def _expand_skill_to_skill(self, skills: List[str], top_n: int, normalize: bool) -> Dict[str, Any]:
-        """Expand skills to related skills."""
+        """Expand skills to related skills - FIXED to use multiple skills collectively."""
         try:
             print(f"🔧 SKILL-TO-SKILL EXPANSION for: {skills}")
             
@@ -368,37 +738,41 @@ class MatrixExpansionTool(Tool):
                     "method": "feature_missing"
                 }
             
-            # Convert skill names to IDs
+            # Convert ALL skill names to IDs first
             skill_ids = []
             skill_mapping = {}
             
             for skill in skills:
                 skill_id = self._convert_skill_to_id(skill)
-                if skill_id:
+                if skill_id and skill_id != "":
                     skill_ids.append(skill_id)
                     skill_mapping[skill_id] = skill
                     print(f"  ✅ {skill} -> ID: {skill_id}")
                 else:
-                    print(f"  ❌ {skill} -> No ID found")
+                    print(f"  ❌ {skill} -> No valid ID found")
             
             if not skill_ids:
+                print(f"❌ No valid skill IDs found, falling back to LLM")
                 return {
                     "success": False,
                     "error": "No valid skill IDs found",
                     "method": "skill_to_skill_matrix"
                 }
             
-            # Call the matrix feature
+            # CRITICAL FIX: Pass ALL skill IDs to matrix at once
+            # This finds skills similar to the COMBINATION of input skills
             print(f"🔍 Calling skillToSkillFeature.get_feature_value...")
             print(f"  - Input IDs: {skill_ids}")
             print(f"  - TopN: {top_n * 2}")
             print(f"  - Normalize: {normalize}")
             
+            # This is the correct usage - multiple skills as input
             expansion_results = self._matrix_features.skillToSkillFeature.get_feature_value(
                 skill_ids, topN=top_n * 2, normalize=normalize
             )
             
             print(f"📊 Matrix returned {len(expansion_results)} results")
+            print(f"🎯 Finding skills similar to ALL input skills: {[skill_mapping.get(sid, sid) for sid in skill_ids]}")
             
             # Convert back to skill names and format results
             expanded_skills = []
@@ -407,6 +781,7 @@ class MatrixExpansionTool(Tool):
             for skill_id, score in sorted(expansion_results.items(), key=lambda x: -x[1]):
                 # Skip if it's one of the input skills
                 if skill_id in skill_mapping:
+                    print(f"  ⏭️  Skipping input skill: {skill_mapping[skill_id]} (ID: {skill_id})")
                     continue
                     
                 skill_name = self._convert_id_to_skill(skill_id)
@@ -427,7 +802,7 @@ class MatrixExpansionTool(Tool):
                 "expanded_items": expanded_skills,
                 "total_found": len(expansion_results),
                 "method": "skill_to_skill_matrix",
-                "message": f"Found {len(expanded_skills)} related skills using matrix analysis"
+                "message": f"Found {len(expanded_skills)} skills similar to ALL input skills: {', '.join(skills)}"
             }
             
         except Exception as e:
@@ -511,7 +886,7 @@ class MatrixExpansionTool(Tool):
             }
     
     async def _expand_title_to_skill(self, titles: List[str], top_n: int, normalize: bool) -> Dict[str, Any]:
-        """Expand titles to related skills."""
+        """Expand titles to related skills using TitleConvertor."""
         try:
             print(f"🔧 TITLE-TO-SKILL EXPANSION for: {titles}")
             
@@ -522,10 +897,10 @@ class MatrixExpansionTool(Tool):
                     "method": "feature_missing"
                 }
             
-            # Convert title names to IDs
+            # Convert title names to IDs using TitleConvertor
             title_ids = []
             for title in titles:
-                title_id = self._convert_skill_to_id(title)
+                title_id = self._convert_title_to_id(title)  # Use TitleConvertor
                 if title_id:
                     title_ids.append(title_id)
                     print(f"  ✅ {title} -> ID: {title_id}")
@@ -545,12 +920,22 @@ class MatrixExpansionTool(Tool):
             
             print(f"📊 Matrix returned {len(expansion_results)} results")
             
-            # Convert skill IDs back to names
+            # Validate that we actually got meaningful results
+            if not expansion_results or len(expansion_results) == 0:
+                print(f"❌ Matrix returned empty results - titles may not exist in matrix")
+                return {
+                    "success": False,
+                    "error": "No skills found in matrix database for the given titles",
+                    "method": "title_to_skill_matrix",
+                    "details": f"Title IDs {title_ids} not found in matrix"
+                }
+            
+            # Convert skill IDs back to names using SkillConvertor
             expanded_skills = []
             processed_count = 0
             
             for skill_id, score in sorted(expansion_results.items(), key=lambda x: -x[1]):
-                skill_name = self._convert_id_to_skill(skill_id)
+                skill_name = self._convert_id_to_skill(skill_id)  # Use SkillConvertor for skills
                 if skill_name and skill_name != "UNKNOWN" and processed_count < top_n:
                     expanded_skills.append({
                         "name": skill_name,
@@ -560,6 +945,15 @@ class MatrixExpansionTool(Tool):
                     })
                     processed_count += 1
                     print(f"  🎯 {skill_name} (ID: {skill_id}, Score: {score:.4f})")
+            
+            # Validate that we got actual expanded skills
+            if not expanded_skills:
+                print(f"❌ No valid expanded skills after processing")
+                return {
+                    "success": False,
+                    "error": "No valid skills found after processing matrix results",
+                    "method": "title_to_skill_matrix"
+                }
             
             return {
                 "success": True,
@@ -578,9 +972,8 @@ class MatrixExpansionTool(Tool):
                 "error": str(e),
                 "method": "title_to_skill_matrix"
             }
-    
     async def _expand_title_to_title(self, titles: List[str], top_n: int, normalize: bool) -> Dict[str, Any]:
-        """Expand titles to related titles."""
+        """Expand titles to related titles using TitleConvertor."""
         try:
             print(f"🔧 TITLE-TO-TITLE EXPANSION for: {titles}")
             
@@ -591,16 +984,18 @@ class MatrixExpansionTool(Tool):
                     "method": "feature_missing"
                 }
             
-            # Convert title names to IDs
+            # Convert title names to IDs using TitleConvertor
             title_ids = []
             title_mapping = {}
             
             for title in titles:
-                title_id = self._convert_skill_to_id(title)
+                title_id = self._convert_title_to_id(title)  # Use TitleConvertor
                 if title_id:
                     title_ids.append(title_id)
                     title_mapping[title_id] = title
                     print(f"  ✅ {title} -> ID: {title_id}")
+                else:
+                    print(f"  ❌ {title} -> No valid ID found")
             
             if not title_ids:
                 return {
@@ -617,6 +1012,16 @@ class MatrixExpansionTool(Tool):
             
             print(f"📊 Matrix returned {len(expansion_results)} results")
             
+            # Validate that we actually got meaningful results
+            if not expansion_results or len(expansion_results) == 0:
+                print(f"❌ Matrix returned empty results - titles may not exist in matrix")
+                return {
+                    "success": False,
+                    "error": "No titles found in matrix database for the given inputs",
+                    "method": "title_to_title_matrix",
+                    "details": f"Title IDs {title_ids} not found in matrix"
+                }
+            
             # Convert back to title names and format results
             expanded_titles = []
             processed_count = 0
@@ -624,9 +1029,10 @@ class MatrixExpansionTool(Tool):
             for title_id, score in sorted(expansion_results.items(), key=lambda x: -x[1]):
                 # Skip if it's one of the input titles
                 if title_id in title_mapping:
+                    print(f"  ⏭️  Skipping input title: {title_mapping[title_id]} (ID: {title_id})")
                     continue
                     
-                title_name = self._convert_id_to_skill(title_id)
+                title_name = self._convert_id_to_title(title_id)  # Use TitleConvertor
                 if title_name and title_name != "UNKNOWN" and processed_count < top_n:
                     expanded_titles.append({
                         "name": title_name,
@@ -636,6 +1042,15 @@ class MatrixExpansionTool(Tool):
                     })
                     processed_count += 1
                     print(f"  🎯 {title_name} (ID: {title_id}, Score: {score:.4f})")
+            
+            # Validate that we got actual expanded titles
+            if not expanded_titles:
+                print(f"❌ No valid expanded titles after processing")
+                return {
+                    "success": False,
+                    "error": "No valid expanded titles found after processing matrix results",
+                    "method": "title_to_title_matrix"
+                }
             
             return {
                 "success": True,
@@ -649,11 +1064,14 @@ class MatrixExpansionTool(Tool):
             
         except Exception as e:
             logger.error(f"Title-to-title expansion failed: {e}")
+            print(f"❌ Title-to-title expansion error: {e}")
             return {
                 "success": False,
                 "error": str(e),
                 "method": "title_to_title_matrix"
             }
+
+    
     
     def get_matrix_stats(self) -> Dict[str, Any]:
         """Get statistics about the matrix system."""
@@ -674,6 +1092,7 @@ class MatrixExpansionTool(Tool):
                 },
                 "feature_matrix_loader_available": self._feature_matrix_loader is not None,
                 "skill_convertor_available": self._skill_convertor is not None,
+                "title_convertor_available": self._title_convertor is not None,  # NEW
                 "singleton_initialized": self._initialized
             }
             
@@ -682,7 +1101,6 @@ class MatrixExpansionTool(Tool):
                 "available": False,
                 "error": str(e)
             }
-
 
 # Test function 
 async def test_matrix_expansion():

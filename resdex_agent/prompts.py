@@ -11,7 +11,7 @@ class RootAgentPrompts:
     
     @staticmethod
     def get_routing_prompt_with_memory(user_input: str, session_state: Dict[str, Any], memory_context: List[Dict[str, Any]]) -> str:
-        """Enhanced routing prompt with memory context."""
+        """Enhanced routing prompt with memory context and expanded expansion support."""
         
         memory_summary = ""
         if memory_context and len(memory_context) > 0:
@@ -24,65 +24,86 @@ class RootAgentPrompts:
                 
                 if memory_items:
                     memory_summary = f"""
-Recent conversation context:
-{chr(10).join(memory_items)}
-"""
+    Recent conversation context:
+    {chr(10).join(memory_items)}
+    """
             except Exception as e:
                 print(f"⚠️ Memory context processing failed: {e}")
                 memory_summary = ""
-        return f"""You are a routing assistant for a candidate search system with memory awareness. Think through the classification and respond with JSON.
+        
+        return f"""You are a routing assistant for a candidate search system with memory awareness and expansion capabilities. Think through the classification and respond with JSON.
 
-{memory_summary}
+    {memory_summary}
 
-Current context:
-- Active search filters: {session_state.get('keywords', [])}
-- Current candidates: {len(session_state.get('candidates', []))} results
+    Current context:
+    - Active search filters: {session_state.get('keywords', [])}
+    - Current candidates: {len(session_state.get('candidates', []))} results
 
-User input: "{user_input}"
+    User input: "{user_input}"
 
-<think>
-Consider both the current user input and the conversation history:
-1. Does this relate to previous conversations or searches?
-2. Is this a new request or continuation of previous discussion?
-3. Should this be routed to search operations or general conversation?
+    <think>
+    Consider both the current user input and the conversation history:
+    1. Does this relate to previous conversations or searches?
+    2. Is this a new request or continuation of previous discussion?
+    3. Should this be routed to expansion operations, search operations, or general conversation?
 
-Analyze the user input to determine if this is:
-1. Search/filter operations (adding skills, modifying criteria, searching)
-2. General conversation/questions (greetings, help, analysis requests)
-3. Memory-related queries (asking about past conversations)
-</think>
+    Analyze the user input to determine if this is:
+    1. EXPANSION operations (skill expansion, title expansion, location expansion)
+    2. SEARCH/FILTER operations (adding skills, modifying criteria, searching) 
+    3. GENERAL conversation/questions (greetings, help, analysis requests)
+    4. MEMORY-related queries (asking about past conversations)
+    </think>
 
-ROUTING RULES:
-1. If input involves SEARCH/FILTER operations → route to "search_interaction"
-2. If input asks about PAST/PREVIOUS conversations → route to "general_query" (memory will be handled)
-3. If input is general conversation/analysis → route to "general_query"
+    ENHANCED ROUTING RULES:
+    1. If input involves EXPANSION operations → route to "expansion"
+    - Skill expansion: "similar skills to X", "related skills", "expand skills", "skills like X"
+    - Title expansion: "similar titles to X", "related titles", "expand titles", "titles like X", "similar roles", "related positions"
+    - Location expansion: "nearby locations", "similar cities", "locations near X"
+    
+    2. If input involves SEARCH/FILTER operations → route to "search_interaction"
+    - Adding/removing skills, experience, salary, location filters
+    - Search commands: "search with", "find", "show me", "filter by"
+    - Modifying any search criteria
 
-SEARCH/FILTER indicators:
-- Adding/removing skills, experience, salary, location filters
-- Search commands: "search with", "find", "show me", "filter by"
-- Modifying any search criteria
+    3. If input asks about PAST/PREVIOUS conversations → route to "general_query"
 
-MEMORY QUERY indicators:
-- "remember", "recall", "what did we discuss", "previous", "before", "last time"
-- References to past conversations or searches
+    4. If input is general conversation/analysis → route to "general_query"
 
-GENERAL QUERY indicators:
-- Greetings: "hi", "hello", "hey"
-- Analysis: "analyze results", "explain", "what do you think"
-- Questions: "how does this work", "what can you do"
+    EXPANSION INDICATORS (route to "expansion"):
+    - "similar skills to [X]", "related skills", "skills like [X]"
+    - "similar titles to [X]", "related titles", "titles like [X]"  
+    - "similar roles to [X]", "related roles", "roles like [X]"
+    - "similar positions to [X]", "related positions", "positions like [X]"
+    - "nearby locations to [X]", "similar cities", "locations near [X]"
+    - "expand [X]", "find similar [X]", "related to [X]"
 
-Response format:
-{{
-    "request_type": "search_interaction" | "general_query",
-    "confidence": 0.0-1.0,
-    "reasoning": "brief explanation",
-    "memory_influenced": true | false
-}}
+    SEARCH/FILTER INDICATORS (route to "search_interaction"):
+    - Adding/removing skills, experience, salary, location filters
+    - Search commands: "search with", "find candidates", "show me results", "filter by"
+    - Modifying any search criteria without expansion
 
-Examples:
-"filter by python" → {{"request_type": "search_interaction", "confidence": 0.95, "reasoning": "Clear filter command", "memory_influenced": false}}
-"what did we discuss about java last time" → {{"request_type": "general_query", "confidence": 0.95, "reasoning": "Memory query about past discussion", "memory_influenced": true}}
-"hello" → {{"request_type": "general_query", "confidence": 0.95, "reasoning": "Greeting message", "memory_influenced": false}}"""
+    MEMORY QUERY INDICATORS (route to "general_query"):
+    - "remember", "recall", "what did we discuss", "previous", "before", "last time"
+
+    GENERAL QUERY INDICATORS (route to "general_query"):
+    - Greetings: "hi", "hello", "hey"
+    - Analysis: "analyze results", "explain", "what do you think"
+    - Questions: "how does this work", "what can you do"
+
+    Response format:
+    {{
+        "request_type": "expansion" | "search_interaction" | "general_query",
+        "expansion_subtype": "skill_expansion" | "title_expansion" | "location_expansion" | null,
+        "confidence": 0.0-1.0,
+        "reasoning": "brief explanation",
+        "memory_influenced": true | false
+    }}
+
+    Examples:
+    "similar skills to python" → {{"request_type": "expansion", "expansion_subtype": "skill_expansion", "confidence": 0.95, "reasoning": "Clear skill expansion request", "memory_influenced": false}}
+    "find similar titles to data scientist" → {{"request_type": "expansion", "expansion_subtype": "title_expansion", "confidence": 0.95, "reasoning": "Clear title expansion request", "memory_influenced": false}}
+    "filter by java" → {{"request_type": "search_interaction", "expansion_subtype": null, "confidence": 0.95, "reasoning": "Clear filter command", "memory_influenced": false}}
+    "hello" → {{"request_type": "general_query", "expansion_subtype": null, "confidence": 0.95, "reasoning": "Greeting message", "memory_influenced": false}}"""
 
     @staticmethod
     def get_general_query_prompt_with_memory(user_input: str, session_state: Dict[str, Any], memory_context: List[Dict[str, Any]]) -> str:

@@ -110,7 +110,7 @@ class ExpansionAgent(BaseResDexAgent):
             })
     
     def _determine_expansion_type(self, user_input: str, intent_data: Dict[str, Any]) -> str:
-        """Enhanced expansion type determination."""
+        """Enhanced expansion type determination with better detection."""
         input_lower = user_input.lower()
         
         # Check intent data first
@@ -120,22 +120,25 @@ class ExpansionAgent(BaseResDexAgent):
         # Enhanced skill expansion indicators
         skill_indicators = [
             "similar skills", "related skills", "skill expansion", "expand skills",
-            "like", "comparable skills", "equivalent skills", "skills similar to",
-            "find skills", "suggest skills", "skill suggestions"
+            "skills similar to", "skills like", "skills related to",
+            "comparable skills", "equivalent skills", "find skills", "suggest skills", "skill suggestions"
         ]
         
         # Enhanced title expansion indicators  
         title_indicators = [
             "similar titles", "related titles", "job titles", "expand titles",
-            "equivalent roles", "similar roles", "related roles", "titles similar to",
-            "find titles", "suggest titles", "title suggestions", "similar positions",
-            "related positions", "job roles"
+            "titles similar to", "titles like", "titles related to",
+            "equivalent roles", "similar roles", "related roles", "roles similar to", "roles like",
+            "equivalent positions", "similar positions", "related positions", "positions similar to", "positions like",
+            "find titles", "suggest titles", "title suggestions", "find roles", "suggest roles",
+            "job roles", "career roles", "professional roles"
         ]
         
         # Location expansion indicators (unchanged)
         location_indicators = [
             "nearby locations", "similar locations", "location expansion", "expand locations",
-            "nearby cities", "similar cities", "around", "close to", "near"
+            "nearby cities", "similar cities", "around", "close to", "near", "locations near",
+            "cities near", "locations similar to", "cities similar to"
         ]
         
         has_skill = any(indicator in input_lower for indicator in skill_indicators)
@@ -155,12 +158,11 @@ class ExpansionAgent(BaseResDexAgent):
         else:
             return "auto_detection"
     
-    # SIMPLE FIX: Replace the _handle_matrix_skill_expansion method with this clean version
 
     async def _handle_matrix_skill_expansion(self, user_input: str, session_state: Dict[str, Any],
-                                       memory_context: List[Dict[str, Any]], session_id: str, 
-                                       user_id: str) -> Content:
-        """Handle skill expansion with Matrix Features - CLEAN VERSION."""
+                                   memory_context: List[Dict[str, Any]], session_id: str, 
+                                   user_id: str) -> Content:
+        """Handle skill expansion with Matrix Features - COLLECTIVE expansion approach."""
         try:
             print(f"🎯 MATRIX SKILL EXPANSION: Analyzing '{user_input}'")
             
@@ -176,28 +178,88 @@ class ExpansionAgent(BaseResDexAgent):
                     "message": "Please specify skills to expand (e.g., 'find similar skills to python')"
                 })
             
-            # Try Matrix Features expansion
+            # FIXED: Use collective expansion - pass ALL skills at once
+            print(f"🔧 Processing {len(base_skills)} skills collectively: {base_skills}")
+            
             matrix_result = await self.tools["matrix_expansion"](
                 expansion_type="skill_to_skill",
-                base_items=base_skills,
+                base_items=base_skills,  # Pass ALL skills together
                 top_n=5,
                 normalize=True
             )
             
+            print(f"🔍 Matrix expansion result: success={matrix_result.get('success', False)}")
+            
             if matrix_result["success"]:
-                print(f"✅ Matrix expansion successful: {len(matrix_result['expanded_items'])} skills found")
-                return await self._process_matrix_skill_results(matrix_result, base_skills, session_state)
+                print(f"✅ Matrix expansion successful for collective skills")
+                
+                # Process the collective results
+                expanded_items = matrix_result.get("expanded_items", [])
+                expanded_skills = [item["name"] for item in expanded_items]
+                
+                print(f"🎯 Found {len(expanded_skills)} skills similar to ALL input skills: {expanded_skills}")
+                
+                # Apply expanded skills to session state
+                modifications = []
+                for skill_item in expanded_items:
+                    skill_name = skill_item["name"]
+                    if skill_name not in session_state.get('keywords', []):
+                        filter_result = await self.tools["filter_tool"](
+                            "add_skill", session_state, skill=skill_name, mandatory=False
+                        )
+                        if filter_result["success"]:
+                            modifications.extend(filter_result["modifications"])
+                
+                # Create UI-friendly expanded skills data
+                ui_expanded_skills = []
+                for item in expanded_items:
+                    ui_expanded_skills.append({
+                        "name": item["name"],
+                        "score": item["score"],
+                        "confidence": "high",  # Matrix-based = high confidence
+                        "method": "matrix_analysis"
+                    })
+                
+                base_skills_str = ", ".join(base_skills)
+                expanded_skills_str = ", ".join(expanded_skills)
+                
+                if len(base_skills) > 1:
+                    message = f"Matrix analysis found {len(expanded_skills)} skills similar to ALL of: {base_skills_str} → {expanded_skills_str}"
+                else:
+                    message = f"Matrix analysis expanded '{base_skills_str}' to {len(expanded_skills)} related skills: {expanded_skills_str}"
+                
+                return self.create_content({
+                    "success": True,
+                    "expansion_type": "skill_expansion",
+                    "method": "matrix_features",
+                    "base_skills": base_skills,
+                    "expanded_skills": expanded_skills,
+                    "ui_expanded_skills": ui_expanded_skills,
+                    "modifications": modifications,
+                    "session_state": session_state,
+                    "message": message,
+                    "trigger_search": False,
+                    "matrix_stats": {
+                        "total_found": matrix_result.get("total_found", len(expanded_skills)),
+                        "top_displayed": len(ui_expanded_skills),
+                        "confidence": "high",
+                        "collective_expansion": True,
+                        "base_skills_count": len(base_skills)
+                    }
+                })
             else:
                 print(f"⚠️ Matrix expansion failed: {matrix_result.get('error', 'Unknown error')}")
-                print(f"🔄 Falling back to existing LLM expansion...")
+                print(f"🔄 Falling back to LLM expansion...")
                 
-                # Use your existing LLM fallback method
+                # Fallback to LLM for all skills collectively
                 return await self._handle_llm_skill_expansion_fallback(base_skills, session_state, memory_context)
                     
         except Exception as e:
             print(f"❌ Matrix skill expansion error: {e}")
-            # Use your existing LLM fallback
-            base_skills = self._extract_base_skills(user_input, session_state) if hasattr(self, '_extract_base_skills') else []
+            import traceback
+            traceback.print_exc()
+            # Use existing LLM fallback
+            base_skills = base_skills if 'base_skills' in locals() else []
             if base_skills:
                 return await self._handle_llm_skill_expansion_fallback(base_skills, session_state, memory_context)
             else:
@@ -205,19 +267,19 @@ class ExpansionAgent(BaseResDexAgent):
                     "success": False,
                     "error": f"Skill expansion failed: {str(e)}"
                 })
+
     
     async def _handle_matrix_title_expansion(self, user_input: str, session_state: Dict[str, Any],
-                                           memory_context: List[Dict[str, Any]], session_id: str, 
-                                           user_id: str) -> Content:
-        """Handle title expansion with Matrix Features priority and LLM fallback."""
+                                       memory_context: List[Dict[str, Any]], session_id: str, 
+                                       user_id: str) -> Content:
+        """Handle title expansion with Matrix Features - COLLECTIVE expansion approach."""
         try:
             print(f"💼 MATRIX TITLE EXPANSION: Analyzing '{user_input}'")
             
-            # FIXED: Use enhanced title extraction if available
-            if hasattr(self.tools["matrix_expansion"], '_extract_base_titles'):
-                base_titles = self.tools["matrix_expansion"]._extract_base_titles(user_input, session_state)
-            else:
-                base_titles = self._extract_base_titles(user_input, session_state)
+            # Use matrix tool's enhanced title extraction
+            base_titles = self.tools["matrix_expansion"]._extract_base_titles(user_input, session_state)
+            
+            print(f"📝 Base titles identified: {base_titles}")
             
             if not base_titles:
                 return self.create_content({
@@ -226,41 +288,110 @@ class ExpansionAgent(BaseResDexAgent):
                     "message": "Please specify titles to expand (e.g., 'find similar titles to data scientist')"
                 })
             
-            print(f"📝 Base titles identified: {base_titles}")
+            # FIXED: Use collective expansion - pass ALL titles at once
+            print(f"🔧 Processing {len(base_titles)} titles collectively: {base_titles}")
             
-            # PRIMARY: Try Matrix Features expansion
-            matrix_result = await self.tools["matrix_expansion"](
+            # Get similar titles
+            title_result = await self.tools["matrix_expansion"](
                 expansion_type="title_to_title",
-                base_items=base_titles,
-                top_n=5,  # Top 5 for UI display
+                base_items=base_titles,  # Pass ALL titles together
+                top_n=5,
                 normalize=True
             )
             
-            if matrix_result["success"]:
-                print(f"✅ Matrix title expansion successful: {len(matrix_result['expanded_items'])} titles found")
+            # Get suggested skills for these titles
+            skills_result = await self.tools["matrix_expansion"](
+                expansion_type="title_to_skill",
+                base_items=base_titles,  # Pass ALL titles together
+                top_n=5,
+                normalize=True
+            )
+            
+            print(f"🔍 Title expansion result: success={title_result.get('success', False)}")
+            print(f"🔍 Skills suggestion result: success={skills_result.get('success', False)}")
+            
+            if title_result["success"]:
+                print(f"✅ Matrix title expansion successful for collective titles")
                 
-                # Also get suggested skills for these titles
-                skills_result = await self.tools["matrix_expansion"](
-                    expansion_type="title_to_skill",
-                    base_items=base_titles,
-                    top_n=5,
-                    normalize=True
-                )
+                # Process the collective results
+                expanded_titles = [item["name"] for item in title_result.get("expanded_items", [])]
+                suggested_skills = [item["name"] for item in skills_result.get("expanded_items", [])] if skills_result.get("success") else []
                 
-                return await self._process_matrix_title_results(matrix_result, skills_result, base_titles, session_state)
+                print(f"🎯 Found {len(expanded_titles)} titles similar to ALL input titles: {expanded_titles}")
+                print(f"🎯 Found {len(suggested_skills)} skills relevant to these titles: {suggested_skills}")
+                
+                # Apply suggested skills to session state (limit to top 3)
+                modifications = []
+                for skill_item in skills_result.get("expanded_items", [])[:3]:
+                    skill_name = skill_item["name"]
+                    if skill_name not in session_state.get('keywords', []):
+                        filter_result = await self.tools["filter_tool"](
+                            "add_skill", session_state, skill=skill_name, mandatory=False
+                        )
+                        if filter_result["success"]:
+                            modifications.extend(filter_result["modifications"])
+                
+                # Create UI-friendly data
+                ui_expanded_titles = []
+                for item in title_result["expanded_items"]:
+                    ui_expanded_titles.append({
+                        "name": item["name"],
+                        "score": item["score"],
+                        "confidence": "high",
+                        "method": "matrix_analysis"
+                    })
+                
+                ui_suggested_skills = []
+                for item in skills_result.get("expanded_items", [])[:5]:
+                    ui_suggested_skills.append({
+                        "name": item["name"],
+                        "score": item["score"],
+                        "confidence": "high",
+                        "method": "matrix_analysis"
+                    })
+                
+                base_titles_str = ", ".join(base_titles)
+                expanded_titles_str = ", ".join(expanded_titles)
+                
+                if len(base_titles) > 1:
+                    message = f"Matrix analysis found {len(expanded_titles)} titles similar to ALL of: {base_titles_str} and added {len(suggested_skills[:3])} relevant skills → {expanded_titles_str}"
+                else:
+                    message = f"Matrix analysis expanded '{base_titles_str}' to {len(expanded_titles)} related titles and added {len(suggested_skills[:3])} relevant skills: {expanded_titles_str}"
+                
+                return self.create_content({
+                    "success": True,
+                    "expansion_type": "title_expansion",
+                    "method": "matrix_features",
+                    "base_titles": base_titles,
+                    "expanded_titles": expanded_titles,
+                    "suggested_skills": suggested_skills[:3],
+                    "ui_expanded_titles": ui_expanded_titles,
+                    "ui_suggested_skills": ui_suggested_skills,
+                    "modifications": modifications,
+                    "session_state": session_state,
+                    "message": message,
+                    "trigger_search": False,
+                    "matrix_stats": {
+                        "titles_found": title_result.get("total_found", len(expanded_titles)),
+                        "skills_found": skills_result.get("total_found", 0),
+                        "confidence": "high",
+                        "collective_expansion": True,
+                        "base_titles_count": len(base_titles)
+                    }
+                })
             else:
-                print(f"⚠️ Matrix title expansion failed: {matrix_result.get('error', 'Unknown error')}")
+                print(f"⚠️ Matrix title expansion failed: {title_result.get('error', 'Unknown error')}")
                 print(f"🔄 Falling back to LLM expansion...")
                 
-                # FALLBACK: Use LLM expansion
+                # Fallback to LLM for all titles collectively
                 return await self._handle_llm_title_expansion_fallback(base_titles, session_state, memory_context)
                 
         except Exception as e:
-            logger.error(f"Matrix title expansion failed: {e}")
             print(f"❌ Matrix title expansion error: {e}")
-            
-            # Final fallback to LLM
-            base_titles = self._extract_base_titles(user_input, session_state)
+            import traceback
+            traceback.print_exc()
+            # Use existing LLM fallback
+            base_titles = base_titles if 'base_titles' in locals() else []
             if base_titles:
                 return await self._handle_llm_title_expansion_fallback(base_titles, session_state, memory_context)
             else:
@@ -270,13 +401,67 @@ class ExpansionAgent(BaseResDexAgent):
                 })
     
     async def _process_matrix_skill_results(self, matrix_result: Dict[str, Any], base_skills: List[str], 
-                                          session_state: Dict[str, Any]) -> Content:
+                                      session_state: Dict[str, Any]) -> Content:
         """Process matrix skill expansion results and apply to session state."""
         try:
-            expanded_items = matrix_result["expanded_items"]
-            expanded_skills = [item["name"] for item in expanded_items]
+            print(f"🔧 Processing matrix skill results...")
+            print(f"📊 Matrix result keys: {list(matrix_result.keys())}")
+            print(f"📊 Matrix result type: {type(matrix_result)}")
             
-            print(f"🔧 Processing {len(expanded_skills)} matrix-expanded skills")
+            # FIX: The matrix_result already contains the processed results
+            # We need to extract the ui_expanded_skills directly
+            
+            if "ui_expanded_skills" in matrix_result:
+                # Matrix tool already processed the results
+                expanded_items = matrix_result["ui_expanded_skills"]
+                expanded_skills = matrix_result["expanded_skills"]
+                
+                print(f"🔧 Using pre-processed results: {len(expanded_items)} skills")
+                
+            elif "expanded_items" in matrix_result:
+                # Legacy format
+                expanded_items = matrix_result["expanded_items"]
+                expanded_skills = [item["name"] for item in expanded_items]
+                
+            else:
+                # Raw matrix format (skill_id -> score)
+                print(f"🔧 Processing raw matrix format...")
+                expanded_items = []
+                
+                # Check if we have raw matrix results
+                raw_results = {k: v for k, v in matrix_result.items() 
+                            if k not in ['success', 'expansion_type', 'method', 'base_skills', 'expanded_skills', 'ui_expanded_skills', 'modifications', 'session_state', 'message', 'trigger_search', 'matrix_stats']}
+                
+                if raw_results:
+                    # Convert raw results to proper format
+                    for skill_id, score in sorted(raw_results.items(), key=lambda x: -float(x[1])):
+                        skill_name = self.tools["matrix_expansion"]._convert_id_to_skill(skill_id)
+                        if skill_name and skill_name != "UNKNOWN":
+                            expanded_items.append({
+                                "name": skill_name,
+                                "id": skill_id,
+                                "score": float(score),
+                                "type": "skill"
+                            })
+                            if len(expanded_items) >= 5:
+                                break
+                    
+                    expanded_skills = [item["name"] for item in expanded_items]
+                else:
+                    print(f"❌ No valid expansion data found in matrix result")
+                    return self.create_content({
+                        "success": False,
+                        "error": "No valid expansion data found in matrix result"
+                    })
+            
+            if not expanded_items:
+                print(f"❌ No expanded items found")
+                return self.create_content({
+                    "success": False,
+                    "error": "No expanded skills found"
+                })
+            
+            print(f"🔧 Processing {len(expanded_skills)} matrix-expanded skills: {expanded_skills}")
             
             # Apply expanded skills to session state
             modifications = []
@@ -289,15 +474,18 @@ class ExpansionAgent(BaseResDexAgent):
                     if filter_result["success"]:
                         modifications.extend(filter_result["modifications"])
             
-            # Create UI-friendly expanded skills data
-            ui_expanded_skills = []
-            for item in expanded_items:
-                ui_expanded_skills.append({
-                    "name": item["name"],
-                    "score": item["score"],
-                    "confidence": "high",  # Matrix-based = high confidence
-                    "method": "matrix_analysis"
-                })
+            # Create UI-friendly expanded skills data (if not already processed)
+            if "ui_expanded_skills" in matrix_result:
+                ui_expanded_skills = matrix_result["ui_expanded_skills"]
+            else:
+                ui_expanded_skills = []
+                for item in expanded_items:
+                    ui_expanded_skills.append({
+                        "name": item["name"],
+                        "score": item.get("score", 0.8),
+                        "confidence": "high",  # Matrix-based = high confidence
+                        "method": "matrix_analysis"
+                    })
             
             base_skills_str = ", ".join(base_skills)
             expanded_skills_str = ", ".join(expanded_skills)
@@ -315,7 +503,7 @@ class ExpansionAgent(BaseResDexAgent):
                 "message": message,
                 "trigger_search": False,
                 "matrix_stats": {
-                    "total_found": matrix_result["total_found"],
+                    "total_found": len(expanded_items),
                     "top_displayed": len(ui_expanded_skills),
                     "confidence": "high"
                 }
@@ -323,10 +511,14 @@ class ExpansionAgent(BaseResDexAgent):
             
         except Exception as e:
             logger.error(f"Processing matrix skill results failed: {e}")
+            print(f"❌ Processing matrix skill results failed: {e}")
+            import traceback
+            traceback.print_exc()
             return self.create_content({
                 "success": False,
                 "error": f"Processing matrix skill results failed: {str(e)}"
             })
+
     
     async def _process_matrix_title_results(self, title_result: Dict[str, Any], skills_result: Dict[str, Any],
                                           base_titles: List[str], session_state: Dict[str, Any]) -> Content:
@@ -439,10 +631,14 @@ class ExpansionAgent(BaseResDexAgent):
     
     def _extract_base_titles(self, user_input: str, session_state: Dict[str, Any]) -> List[str]:
         """Enhanced title extraction from user input."""
+        # Use matrix tool's title extraction if available
+        if hasattr(self.tools["matrix_expansion"], '_extract_base_titles'):
+            return self.tools["matrix_expansion"]._extract_base_titles(user_input, session_state)
+        
+        # Fallback method (original logic)
         titles = []
         input_lower = user_input.lower()
         
-        # Enhanced title extraction patterns
         title_patterns = [
             r"titles?\s+(?:to|like|similar\s+to)\s+([a-zA-Z\s,]+)",
             r"roles?\s+(?:to|like|similar\s+to)\s+([a-zA-Z\s,]+)",
@@ -806,8 +1002,8 @@ class ExpansionAgent(BaseResDexAgent):
             })
     
     async def _handle_multi_expansion(self, user_input: str, session_state: Dict[str, Any],
-                                    memory_context: List[Dict[str, Any]], session_id: str, 
-                                    user_id: str) -> Content:
+                                memory_context: List[Dict[str, Any]], session_id: str, 
+                                user_id: str) -> Content:
         """Handle multiple expansion types in sequence with Matrix Features priority."""
         try:
             print(f"🔄 ENHANCED MULTI-EXPANSION: Processing '{user_input}'")
@@ -819,7 +1015,7 @@ class ExpansionAgent(BaseResDexAgent):
             input_lower = user_input.lower()
             
             # Skill expansion with Matrix Features
-            if any(indicator in input_lower for indicator in ["skill", "similar skills", "related skills"]):
+            if any(indicator in input_lower for indicator in ["skill", "skills", "similar skills", "related skills"]):
                 skill_result = await self._handle_matrix_skill_expansion(user_input, session_state, memory_context, session_id, user_id)
                 if skill_result.data.get("success"):
                     all_modifications.extend(skill_result.data.get("modifications", []))
@@ -827,7 +1023,7 @@ class ExpansionAgent(BaseResDexAgent):
                     expansion_results.append(f"Skills ({method}): {skill_result.data.get('message', '')}")
             
             # Title expansion with Matrix Features
-            if any(indicator in input_lower for indicator in ["title", "role", "designation"]):
+            if any(indicator in input_lower for indicator in ["title", "titles", "role", "roles", "position", "positions", "similar titles", "related titles", "similar roles", "related roles"]):
                 title_result = await self._handle_matrix_title_expansion(user_input, session_state, memory_context, session_id, user_id)
                 if title_result.data.get("success"):
                     all_modifications.extend(title_result.data.get("modifications", []))
@@ -835,7 +1031,7 @@ class ExpansionAgent(BaseResDexAgent):
                     expansion_results.append(f"Titles ({method}): {title_result.data.get('message', '')}")
             
             # Location expansion (unchanged)
-            if any(indicator in input_lower for indicator in ["location", "nearby", "similar cities"]):
+            if any(indicator in input_lower for indicator in ["location", "locations", "nearby", "similar cities", "cities", "city"]):
                 location_result = await self._handle_location_expansion(user_input, session_state, memory_context, session_id, user_id)
                 if location_result.data.get("success"):
                     all_modifications.extend(location_result.data.get("modifications", []))
@@ -862,29 +1058,32 @@ class ExpansionAgent(BaseResDexAgent):
             })
     
     async def _handle_auto_expansion(self, user_input: str, session_state: Dict[str, Any],
-                               memory_context: List[Dict[str, Any]], session_id: str, 
-                               user_id: str) -> Content:
-        """Auto-detect expansion type - SIMPLIFIED."""
+                           memory_context: List[Dict[str, Any]], session_id: str, 
+                           user_id: str) -> Content:
+        """Auto-detect expansion type with enhanced title detection."""
         try:
             print(f"🔍 AUTO-EXPANSION: '{user_input}'")
             
-            # Simple detection
+            # Enhanced detection
             input_lower = user_input.lower()
             
-            if any(word in input_lower for word in ["skill", "skills", "similar skills"]):
+            # Check for skill expansion
+            if any(word in input_lower for word in ["skill", "skills", "similar skills", "related skills"]):
                 print(f"🎯 Detected skill expansion")
                 return await self._handle_matrix_skill_expansion(user_input, session_state, memory_context, session_id, user_id)
             
-            elif any(word in input_lower for word in ["title", "titles", "role", "roles"]):
+            # Check for title expansion
+            elif any(word in input_lower for word in ["title", "titles", "role", "roles", "position", "positions", "similar titles", "related titles", "similar roles", "related roles"]):
                 print(f"🎯 Detected title expansion")
                 return await self._handle_matrix_title_expansion(user_input, session_state, memory_context, session_id, user_id)
             
-            elif any(word in input_lower for word in ["location", "city", "nearby"]):
+            # Check for location expansion
+            elif any(word in input_lower for word in ["location", "city", "nearby", "cities", "similar locations", "nearby locations"]):
                 print(f"🎯 Detected location expansion")
                 return await self._handle_location_expansion(user_input, session_state, memory_context, session_id, user_id)
             
             else:
-                # Default to skill expansion
+                # Default to skill expansion if uncertain
                 print(f"🎯 Defaulting to skill expansion")
                 return await self._handle_matrix_skill_expansion(user_input, session_state, memory_context, session_id, user_id)
                 
@@ -893,7 +1092,6 @@ class ExpansionAgent(BaseResDexAgent):
                 "success": False,
                 "error": f"Auto-expansion failed: {str(e)}"
             })
-    # Keep all existing helper methods (LLM expansion, location extraction, fallbacks, etc.)
     
     async def _expand_skills_with_llm(self, base_skill: str, memory_context: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Use LLM to expand skills (existing method for fallback)."""

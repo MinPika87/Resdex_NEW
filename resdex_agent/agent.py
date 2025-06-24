@@ -179,19 +179,51 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             })
     
     async def _try_intelligent_routing(self, content: Content, session_id: str, user_id: str) -> Content:
-        """NEW: Try intelligent routing if agents are available."""
+        """NEW: Intelligent multi-intent orchestration with expansion support."""
         user_input = content.data.get("user_input", "")
         session_state = content.data.get("session_state", {})
         
-        # Simple routing logic
+        # STEP 1: Multi-Intent Analysis using LLM
+        intent_breakdown = await self._analyze_multi_intent_breakdown(user_input, session_state)
+        
+        print(f"🔍 INTENT BREAKDOWN RESULT: {intent_breakdown}")
+        
+        # Execute orchestration when multi-intent is detected
+        if intent_breakdown["success"] and intent_breakdown.get("is_multi_intent", False):
+            if session_id:
+                step_logger.log_step(f"🔗 Multi-intent detected: {intent_breakdown['total_intents']} intents", "orchestration")
+            
+            print(f"🎯 EXECUTING MULTI-INTENT ORCHESTRATION")
+            
+            return await self._execute_multi_intent_orchestration(
+                intent_breakdown, user_input, session_state, session_id, user_id
+            )
+        
+        # Only fall through to single-intent routing if NOT multi-intent
+        print(f"🔄 SINGLE INTENT ROUTING (multi-intent not detected)")
+        
+        # STEP 2: Enhanced Single Intent Routing with expansion support
         input_lower = user_input.lower()
         
-        # Route to ExpansionAgent if available
+        # ENHANCED: Route to ExpansionAgent for all expansion types
         if "expansion" in self.sub_agents:
             expansion_indicators = [
-                "similar skills", "related skills", "nearby locations", "similar locations",
-                "expand", "find similar", "related to", "like"
+                # Skill expansion
+                "similar skills", "related skills", "skills similar to", "skills like",
+                "expand skills", "find skills", "skill suggestions",
+                
+                # Title expansion  
+                "similar titles", "related titles", "titles similar to", "titles like",
+                "similar roles", "related roles", "roles similar to", "roles like",
+                "similar positions", "related positions", "positions similar to", "positions like",
+                "expand titles", "find titles", "title suggestions",
+                
+                # Location expansion
+                "nearby locations", "similar locations", "locations similar to", "locations like",
+                "nearby cities", "similar cities", "cities similar to", "cities like",
+                "expand locations", "find locations", "around", "close to", "near"
             ]
+            
             if any(indicator in input_lower for indicator in expansion_indicators):
                 if session_id:
                     step_logger.log_step("🎯 Routing to ExpansionAgent", "routing")
@@ -213,6 +245,7 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         
         # If no agents available, use original logic
         return await self._execute_original_logic(content, session_id, user_id)
+    
     async def _try_intelligent_routing(self, content: Content, session_id: str, user_id: str) -> Content:
         """NEW: Intelligent multi-intent orchestration."""
         user_input = content.data.get("user_input", "")
@@ -270,9 +303,9 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         return await self._execute_original_logic(content, session_id, user_id)
 
     async def _analyze_multi_intent_breakdown(self, user_input: str, session_state: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze if query has multiple intents and break them down."""
+        """Analyze if query has multiple intents and break them down - ENHANCED for expansions."""
         
-        prompt = f"""You are an intent analyzer. Break down this user query into distinct, actionable intents for a recruitment system.
+        prompt = f"""You are an intent analyzer. Break down this user query into distinct, actionable intents for a recruitment system with expansion capabilities.
 
     User query: "{user_input}"
 
@@ -283,9 +316,10 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
 
     CRITICAL AGENT ROUTING RULES:
     1. **Skill Expansion**: If user mentions "similar skills to X" or "related skills" → target_agent: "expansion"
-    2. **Location Expansion**: If user mentions "nearby to X" or "similar locations" → target_agent: "expansion"  
-    3. **Filter Operations**: Experience/salary modifications → target_agent: "search_interaction"
-    4. **Search Execution**: Final search trigger → target_agent: "search_interaction"
+    2. **Title Expansion**: If user mentions "similar titles to X" or "related titles/roles/positions" → target_agent: "expansion"  
+    3. **Location Expansion**: If user mentions "nearby to X" or "similar locations" → target_agent: "expansion"
+    4. **Filter Operations**: Experience/salary modifications → target_agent: "search_interaction"
+    5. **Search Execution**: Final search trigger → target_agent: "search_interaction"
 
     Break down the query into individual intents:
 
@@ -295,7 +329,7 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         "intents": [
             {{
                 "intent_id": 1,
-                "intent_type": "skill_operation|filter_operation|location_expansion|search_execution",
+                "intent_type": "skill_expansion|title_expansion|location_expansion|filter_operation|search_execution",
                 "target_agent": "expansion|search_interaction",  // USE RULES ABOVE
                 "extracted_query": "specific query for this intent",
                 "execution_order": 1,
@@ -308,7 +342,8 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
     }}
 
     EXAMPLES:
-    - "similar skills to Python" → {{"target_agent": "expansion", "intent_type": "skill_operation"}}
+    - "similar skills to Python" → {{"target_agent": "expansion", "intent_type": "skill_expansion"}}
+    - "similar titles to data scientist" → {{"target_agent": "expansion", "intent_type": "title_expansion"}}
     - "nearby to Mumbai" → {{"target_agent": "expansion", "intent_type": "location_expansion"}}
     - "10+ years experience" → {{"target_agent": "search_interaction", "intent_type": "filter_operation"}}
     - "execute search" → {{"target_agent": "search_interaction", "intent_type": "search_execution"}}
@@ -316,27 +351,23 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
     Return ONLY the JSON response."""
 
         try:
-            # FIXED: Use correct tool name and task type for JSON parsing
             llm_result = await self.tools["root_llm_tool"]._call_llm_direct(
                 prompt=prompt,
-                task="multi_intent_breakdown"  # This should trigger JSON parsing
+                task="multi_intent_breakdown"
             )
             
             print(f"🔍 LLM RESULT: {llm_result}")
             
             if llm_result["success"]:
-                # FIX: Check for parsed_response first, then try manual parsing
                 if "parsed_response" in llm_result and llm_result["parsed_response"]:
                     breakdown = llm_result["parsed_response"]
                     print(f"🧠 MULTI-INTENT BREAKDOWN (parsed): {breakdown}")
                     return {"success": True, **breakdown}
                 elif "response_text" in llm_result:
-                    # Manual JSON parsing if automatic parsing failed
                     try:
                         import json
                         response_text = llm_result["response_text"].strip()
                         
-                        # Clean response (remove any extra text)
                         if "{" in response_text:
                             json_start = response_text.find("{")
                             json_end = response_text.rfind("}") + 1
@@ -347,7 +378,6 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
                             return {"success": True, **breakdown}
                     except json.JSONDecodeError as e:
                         print(f"❌ JSON parsing failed: {e}")
-                        print(f"Response text: {llm_result.get('response_text', 'No response text')}")
             
             print(f"⚠️ LLM breakdown failed: {llm_result}")
             return {"success": False, "is_multi_intent": False}
@@ -356,7 +386,7 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             logger.error(f"Multi-intent breakdown failed: {e}")
             print(f"❌ Multi-intent breakdown exception: {e}")
             return {"success": False, "is_multi_intent": False}
-
+    
     async def _execute_multi_intent_orchestration(self, intent_breakdown: Dict[str, Any], 
                                                 user_input: str, session_state: Dict[str, Any],
                                                 session_id: str, user_id: str) -> Content:
