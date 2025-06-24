@@ -1,7 +1,6 @@
-
-# resdex_agent/sub_agents/expansion/agent.py
+# resdex_agent/sub_agents/expansion/agent.py - ENHANCED with Matrix Features
 """
-Expansion Agent - Handles skill, location, and title expansion.
+Enhanced Expansion Agent - Matrix-based skill and title expansion with LLM fallback.
 """
 
 from typing import Dict, Any, List, Optional
@@ -15,13 +14,19 @@ logger = logging.getLogger(__name__)
 
 class ExpansionAgent(BaseResDexAgent):
     """
-    Expansion Agent specializing in enriching search queries.
+    Enhanced Expansion Agent with Matrix Features integration.
     
     RESPONSIBILITIES:
-    1. Skill expansion (find related/similar skills)
-    2. Location expansion (find nearby/similar locations) 
-    3. Title expansion (find related job titles)
-    4. Integration with session state for filter updates
+    1. Matrix-based skill expansion (primary method)
+    2. Matrix-based title expansion (primary method)  
+    3. Location expansion (LLM-based)
+    4. LLM fallback for skill/title expansion when matrix fails
+    5. Integration with session state for filter updates
+    
+    HIERARCHY:
+    1. Matrix Features (high accuracy, fast)
+    2. LLM Analysis (fallback, flexible)
+    3. Hardcoded mappings (final fallback)
     """
 
     def __init__(self, config: ExpansionConfig = None):
@@ -35,16 +40,20 @@ class ExpansionAgent(BaseResDexAgent):
         # Initialize expansion-specific tools
         self._setup_expansion_tools()
         
-        logger.info(f"ExpansionAgent initialized with {len(self.tools)} tools")
+        logger.info(f"Enhanced ExpansionAgent initialized with Matrix Features + LLM fallback")
 
     @property
     def config(self):
         return self._config
     
     def _setup_expansion_tools(self):
-        """Setup expansion-specific tools."""
+        """Setup expansion-specific tools with Matrix Features priority."""
         try:
-            # Add location expansion tool (move from SearchInteractionAgent)
+            # PRIMARY: Matrix-based expansion tool
+            from ...tools.matrix_expansion_tool import MatrixExpansionTool
+            self.tools["matrix_expansion"] = MatrixExpansionTool("matrix_expansion_tool")
+            
+            # Location expansion tool (unchanged)
             from ...tools.location_tools import LocationAnalysisTool
             self.tools["location_tool"] = LocationAnalysisTool("location_expansion_tool")
             
@@ -52,153 +61,681 @@ class ExpansionAgent(BaseResDexAgent):
             from ...tools.filter_tools import FilterTool
             self.tools["filter_tool"] = FilterTool("expansion_filter_tool")
             
-            print(f"🔧 ExpansionAgent tools: {list(self.tools.keys())}")
+            print(f"🔧 Enhanced ExpansionAgent tools: {list(self.tools.keys())}")
+            
+            # Check matrix availability
+            matrix_stats = self.tools["matrix_expansion"].get_matrix_stats()
+            if matrix_stats.get("available", False):
+                print("✅ Matrix Features system available - using as primary expansion method")
+            else:
+                print("⚠️ Matrix Features not available - will use LLM fallback only")
             
         except Exception as e:
-            logger.error(f"Failed to setup expansion tools: {e}")
+            logger.error(f"Failed to setup enhanced expansion tools: {e}")
+            print(f"❌ Enhanced expansion tools setup failed: {e}")
     
     async def execute_core(self, content: Content, memory_context: List[Dict[str, Any]], 
                           session_id: str, user_id: str) -> Content:
         """
-        Core expansion logic - determines expansion type and executes.
+        Enhanced core expansion logic with Matrix Features priority.
         """
         try:
             user_input = content.data.get("user_input", "")
             session_state = content.data.get("session_state", {})
             intent_data = content.data.get("intent_data", {})
             
-            logger.info(f"ExpansionAgent processing: '{user_input}'")
-            print(f"🔧 EXPANSION AGENT: Processing '{user_input}'")
+            logger.info(f"Enhanced ExpansionAgent processing: '{user_input}'")
+            print(f"🔧 ENHANCED EXPANSION AGENT: Processing '{user_input}'")
             
             # Determine expansion type
             expansion_type = self._determine_expansion_type(user_input, intent_data)
             
             if expansion_type == "skill_expansion":
-                return await self._handle_skill_expansion(user_input, session_state, memory_context, session_id, user_id)
+                return await self._handle_matrix_skill_expansion(user_input, session_state, memory_context, session_id, user_id)
+            elif expansion_type == "title_expansion":
+                return await self._handle_matrix_title_expansion(user_input, session_state, memory_context, session_id, user_id)
             elif expansion_type == "location_expansion":
                 return await self._handle_location_expansion(user_input, session_state, memory_context, session_id, user_id)
-            elif expansion_type == "title_expansion":
-                return await self._handle_title_expansion(user_input, session_state, memory_context, session_id, user_id)
             elif expansion_type == "multi_expansion":
                 return await self._handle_multi_expansion(user_input, session_state, memory_context, session_id, user_id)
             else:
-                # Fallback to auto-detection
-                return await self   ._handle_auto_expansion(user_input, session_state, memory_context, session_id, user_id)
+                return await self._handle_auto_expansion(user_input, session_state, memory_context, session_id, user_id)
                 
         except Exception as e:
-            logger.error(f"ExpansionAgent execution failed: {e}")
+            logger.error(f"Enhanced ExpansionAgent execution failed: {e}")
             return self.create_content({
                 "success": False,
-                "error": "Expansion failed",
+                "error": "Enhanced expansion failed",
                 "details": str(e)
             })
     
     def _determine_expansion_type(self, user_input: str, intent_data: Dict[str, Any]) -> str:
-        """Determine what type of expansion is needed."""
+        """Enhanced expansion type determination."""
         input_lower = user_input.lower()
         
         # Check intent data first
         if intent_data.get("expansion_type"):
             return intent_data["expansion_type"]
         
-        # Skill expansion indicators
+        # Enhanced skill expansion indicators
         skill_indicators = [
             "similar skills", "related skills", "skill expansion", "expand skills",
-            "like", "comparable skills", "equivalent skills"
+            "like", "comparable skills", "equivalent skills", "skills similar to",
+            "find skills", "suggest skills", "skill suggestions"
         ]
         
-        # Location expansion indicators
+        # Enhanced title expansion indicators  
+        title_indicators = [
+            "similar titles", "related titles", "job titles", "expand titles",
+            "equivalent roles", "similar roles", "related roles", "titles similar to",
+            "find titles", "suggest titles", "title suggestions", "similar positions",
+            "related positions", "job roles"
+        ]
+        
+        # Location expansion indicators (unchanged)
         location_indicators = [
             "nearby locations", "similar locations", "location expansion", "expand locations",
             "nearby cities", "similar cities", "around", "close to", "near"
         ]
         
-        # Title expansion indicators
-        title_indicators = [
-            "similar titles", "related titles", "job titles", "expand titles",
-            "equivalent roles", "similar roles", "related roles"
-        ]
-        
         has_skill = any(indicator in input_lower for indicator in skill_indicators)
-        has_location = any(indicator in input_lower for indicator in location_indicators)
         has_title = any(indicator in input_lower for indicator in title_indicators)
+        has_location = any(indicator in input_lower for indicator in location_indicators)
         
         # Multi-expansion check
-        expansion_count = sum([has_skill, has_location, has_title])
+        expansion_count = sum([has_skill, has_title, has_location])
         if expansion_count > 1:
             return "multi_expansion"
         elif has_skill:
             return "skill_expansion"
-        elif has_location:
-            return "location_expansion"
         elif has_title:
             return "title_expansion"
+        elif has_location:
+            return "location_expansion"
         else:
             return "auto_detection"
     
-    async def _handle_skill_expansion(self, user_input: str, session_state: Dict[str, Any],
-                                    memory_context: List[Dict[str, Any]], session_id: str, 
-                                    user_id: str) -> Content:
-        """Handle skill expansion using LLM."""
+    # SIMPLE FIX: Replace the _handle_matrix_skill_expansion method with this clean version
+
+    async def _handle_matrix_skill_expansion(self, user_input: str, session_state: Dict[str, Any],
+                                       memory_context: List[Dict[str, Any]], session_id: str, 
+                                       user_id: str) -> Content:
+        """Handle skill expansion with Matrix Features - CLEAN VERSION."""
         try:
-            print(f"🎯 SKILL EXPANSION: Analyzing '{user_input}'")
+            print(f"🎯 MATRIX SKILL EXPANSION: Analyzing '{user_input}'")
             
-            # Extract base skill from input or session state
-            base_skill = self._extract_base_skill(user_input, session_state)
+            # Use matrix tool's enhanced skill extraction
+            base_skills = self.tools["matrix_expansion"]._extract_base_skills(user_input, session_state)
             
-            if not base_skill:
+            print(f"📝 Base skills identified: {base_skills}")
+            
+            if not base_skills:
                 return self.create_content({
                     "success": False,
-                    "error": "No base skill found for expansion",
-                    "message": "Please specify a skill to expand (e.g., 'find similar skills to python')"
+                    "error": "No base skills found for expansion",
+                    "message": "Please specify skills to expand (e.g., 'find similar skills to python')"
                 })
             
-            # Use LLM for skill expansion
-            expansion_result = await self._expand_skills_with_llm(base_skill, memory_context)
+            # Try Matrix Features expansion
+            matrix_result = await self.tools["matrix_expansion"](
+                expansion_type="skill_to_skill",
+                base_items=base_skills,
+                top_n=5,
+                normalize=True
+            )
             
-            if not expansion_result["success"]:
-                return self.create_content(expansion_result)
+            if matrix_result["success"]:
+                print(f"✅ Matrix expansion successful: {len(matrix_result['expanded_items'])} skills found")
+                return await self._process_matrix_skill_results(matrix_result, base_skills, session_state)
+            else:
+                print(f"⚠️ Matrix expansion failed: {matrix_result.get('error', 'Unknown error')}")
+                print(f"🔄 Falling back to existing LLM expansion...")
+                
+                # Use your existing LLM fallback method
+                return await self._handle_llm_skill_expansion_fallback(base_skills, session_state, memory_context)
+                    
+        except Exception as e:
+            print(f"❌ Matrix skill expansion error: {e}")
+            # Use your existing LLM fallback
+            base_skills = self._extract_base_skills(user_input, session_state) if hasattr(self, '_extract_base_skills') else []
+            if base_skills:
+                return await self._handle_llm_skill_expansion_fallback(base_skills, session_state, memory_context)
+            else:
+                return self.create_content({
+                    "success": False,
+                    "error": f"Skill expansion failed: {str(e)}"
+                })
+    
+    async def _handle_matrix_title_expansion(self, user_input: str, session_state: Dict[str, Any],
+                                           memory_context: List[Dict[str, Any]], session_id: str, 
+                                           user_id: str) -> Content:
+        """Handle title expansion with Matrix Features priority and LLM fallback."""
+        try:
+            print(f"💼 MATRIX TITLE EXPANSION: Analyzing '{user_input}'")
             
-            expanded_skills = expansion_result["expanded_skills"]
+            # FIXED: Use enhanced title extraction if available
+            if hasattr(self.tools["matrix_expansion"], '_extract_base_titles'):
+                base_titles = self.tools["matrix_expansion"]._extract_base_titles(user_input, session_state)
+            else:
+                base_titles = self._extract_base_titles(user_input, session_state)
+            
+            if not base_titles:
+                return self.create_content({
+                    "success": False,
+                    "error": "No base titles found for expansion",
+                    "message": "Please specify titles to expand (e.g., 'find similar titles to data scientist')"
+                })
+            
+            print(f"📝 Base titles identified: {base_titles}")
+            
+            # PRIMARY: Try Matrix Features expansion
+            matrix_result = await self.tools["matrix_expansion"](
+                expansion_type="title_to_title",
+                base_items=base_titles,
+                top_n=5,  # Top 5 for UI display
+                normalize=True
+            )
+            
+            if matrix_result["success"]:
+                print(f"✅ Matrix title expansion successful: {len(matrix_result['expanded_items'])} titles found")
+                
+                # Also get suggested skills for these titles
+                skills_result = await self.tools["matrix_expansion"](
+                    expansion_type="title_to_skill",
+                    base_items=base_titles,
+                    top_n=5,
+                    normalize=True
+                )
+                
+                return await self._process_matrix_title_results(matrix_result, skills_result, base_titles, session_state)
+            else:
+                print(f"⚠️ Matrix title expansion failed: {matrix_result.get('error', 'Unknown error')}")
+                print(f"🔄 Falling back to LLM expansion...")
+                
+                # FALLBACK: Use LLM expansion
+                return await self._handle_llm_title_expansion_fallback(base_titles, session_state, memory_context)
+                
+        except Exception as e:
+            logger.error(f"Matrix title expansion failed: {e}")
+            print(f"❌ Matrix title expansion error: {e}")
+            
+            # Final fallback to LLM
+            base_titles = self._extract_base_titles(user_input, session_state)
+            if base_titles:
+                return await self._handle_llm_title_expansion_fallback(base_titles, session_state, memory_context)
+            else:
+                return self.create_content({
+                    "success": False,
+                    "error": f"Title expansion failed: {str(e)}"
+                })
+    
+    async def _process_matrix_skill_results(self, matrix_result: Dict[str, Any], base_skills: List[str], 
+                                          session_state: Dict[str, Any]) -> Content:
+        """Process matrix skill expansion results and apply to session state."""
+        try:
+            expanded_items = matrix_result["expanded_items"]
+            expanded_skills = [item["name"] for item in expanded_items]
+            
+            print(f"🔧 Processing {len(expanded_skills)} matrix-expanded skills")
             
             # Apply expanded skills to session state
             modifications = []
-            for skill in expanded_skills:
-                if skill not in session_state.get('keywords', []):
+            for skill_item in expanded_items:
+                skill_name = skill_item["name"]
+                if skill_name not in session_state.get('keywords', []):
                     filter_result = await self.tools["filter_tool"](
-                        "add_skill", session_state, skill=skill, mandatory=False
+                        "add_skill", session_state, skill=skill_name, mandatory=False
                     )
                     if filter_result["success"]:
                         modifications.extend(filter_result["modifications"])
             
-            message = f"Expanded '{base_skill}' to {len(expanded_skills)} related skills: {', '.join(expanded_skills)}"
+            # Create UI-friendly expanded skills data
+            ui_expanded_skills = []
+            for item in expanded_items:
+                ui_expanded_skills.append({
+                    "name": item["name"],
+                    "score": item["score"],
+                    "confidence": "high",  # Matrix-based = high confidence
+                    "method": "matrix_analysis"
+                })
+            
+            base_skills_str = ", ".join(base_skills)
+            expanded_skills_str = ", ".join(expanded_skills)
+            message = f"Matrix analysis expanded '{base_skills_str}' to {len(expanded_skills)} related skills: {expanded_skills_str}"
             
             return self.create_content({
                 "success": True,
                 "expansion_type": "skill_expansion",
-                "base_skill": base_skill,
+                "method": "matrix_features",
+                "base_skills": base_skills,
                 "expanded_skills": expanded_skills,
+                "ui_expanded_skills": ui_expanded_skills,  # For UI display with scores
                 "modifications": modifications,
                 "session_state": session_state,
                 "message": message,
-                "trigger_search": False
+                "trigger_search": False,
+                "matrix_stats": {
+                    "total_found": matrix_result["total_found"],
+                    "top_displayed": len(ui_expanded_skills),
+                    "confidence": "high"
+                }
             })
             
         except Exception as e:
-            logger.error(f"Skill expansion failed: {e}")
+            logger.error(f"Processing matrix skill results failed: {e}")
             return self.create_content({
                 "success": False,
-                "error": f"Skill expansion failed: {str(e)}"
+                "error": f"Processing matrix skill results failed: {str(e)}"
             })
     
+    async def _process_matrix_title_results(self, title_result: Dict[str, Any], skills_result: Dict[str, Any],
+                                          base_titles: List[str], session_state: Dict[str, Any]) -> Content:
+        """Process matrix title expansion results and apply to session state."""
+        try:
+            expanded_titles = [item["name"] for item in title_result["expanded_items"]]
+            suggested_skills = [item["name"] for item in skills_result.get("expanded_items", [])] if skills_result.get("success") else []
+            
+            print(f"🔧 Processing {len(expanded_titles)} matrix-expanded titles and {len(suggested_skills)} suggested skills")
+            
+            # Apply suggested skills to session state (limit to top 3)
+            modifications = []
+            for skill_item in skills_result.get("expanded_items", [])[:3]:
+                skill_name = skill_item["name"]
+                if skill_name not in session_state.get('keywords', []):
+                    filter_result = await self.tools["filter_tool"](
+                        "add_skill", session_state, skill=skill_name, mandatory=False
+                    )
+                    if filter_result["success"]:
+                        modifications.extend(filter_result["modifications"])
+            
+            # Create UI-friendly data
+            ui_expanded_titles = []
+            for item in title_result["expanded_items"]:
+                ui_expanded_titles.append({
+                    "name": item["name"],
+                    "score": item["score"],
+                    "confidence": "high",
+                    "method": "matrix_analysis"
+                })
+            
+            ui_suggested_skills = []
+            for item in skills_result.get("expanded_items", [])[:5]:  # Top 5 for UI
+                ui_suggested_skills.append({
+                    "name": item["name"],
+                    "score": item["score"],
+                    "confidence": "high",
+                    "method": "matrix_analysis"
+                })
+            
+            base_titles_str = ", ".join(base_titles)
+            expanded_titles_str = ", ".join(expanded_titles)
+            message = f"Matrix analysis expanded '{base_titles_str}' to {len(expanded_titles)} related titles and added {len(suggested_skills[:3])} relevant skills"
+            
+            return self.create_content({
+                "success": True,
+                "expansion_type": "title_expansion",
+                "method": "matrix_features",
+                "base_titles": base_titles,
+                "expanded_titles": expanded_titles,
+                "suggested_skills": suggested_skills[:3],
+                "ui_expanded_titles": ui_expanded_titles,
+                "ui_suggested_skills": ui_suggested_skills,
+                "modifications": modifications,
+                "session_state": session_state,
+                "message": message,
+                "trigger_search": False,
+                "matrix_stats": {
+                    "titles_found": title_result["total_found"],
+                    "skills_found": skills_result.get("total_found", 0),
+                    "confidence": "high"
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"Processing matrix title results failed: {e}")
+            return self.create_content({
+                "success": False,
+                "error": f"Processing matrix title results failed: {str(e)}"
+            })
+    
+    def _extract_base_skills(self, user_input: str, session_state: Dict[str, Any]) -> List[str]:
+        """Enhanced skill extraction from user input or session state."""
+        skills = []
+        input_lower = user_input.lower()
+        
+        # Enhanced skill extraction patterns
+        skill_patterns = [
+            r"skills?\s+(?:to|like|similar\s+to)\s+([a-zA-Z+#.\s,]+)",
+            r"expand\s+([a-zA-Z+#.\s,]+)\s+skill",
+            r"similar\s+to\s+([a-zA-Z+#.\s,]+)",
+            r"like\s+([a-zA-Z+#.\s,]+)",
+            r"find\s+skills\s+(?:similar\s+to|like)\s+([a-zA-Z+#.\s,]+)"
+        ]
+        
+        import re
+        for pattern in skill_patterns:
+            match = re.search(pattern, input_lower)
+            if match:
+                skill_text = match.group(1).strip()
+                # Handle multiple skills separated by commas/and
+                skill_candidates = re.split(r'[,\s+and\s+]', skill_text)
+                for skill in skill_candidates:
+                    skill = skill.strip()
+                    if len(skill) > 1 and skill.isalpha():
+                        skills.append(skill.title())
+                break
+        
+        # If no skills found in input, check session state
+        if not skills:
+            keywords = session_state.get('keywords', [])
+            if keywords:
+                # Use the last added skill as base
+                last_skill = keywords[-1].replace('★ ', '')
+                skills.append(last_skill)
+        
+        # Remove duplicates while preserving order
+        unique_skills = list(dict.fromkeys(skills))
+        return unique_skills
+    
+    def _extract_base_titles(self, user_input: str, session_state: Dict[str, Any]) -> List[str]:
+        """Enhanced title extraction from user input."""
+        titles = []
+        input_lower = user_input.lower()
+        
+        # Enhanced title extraction patterns
+        title_patterns = [
+            r"titles?\s+(?:to|like|similar\s+to)\s+([a-zA-Z\s,]+)",
+            r"roles?\s+(?:to|like|similar\s+to)\s+([a-zA-Z\s,]+)",
+            r"positions?\s+(?:to|like|similar\s+to)\s+([a-zA-Z\s,]+)",
+            r"expand\s+([a-zA-Z\s,]+)\s+(?:title|role|position)",
+            r"find\s+titles\s+(?:similar\s+to|like)\s+([a-zA-Z\s,]+)",
+            r"similar\s+to\s+([a-zA-Z\s,]+)\s+(?:role|position|title)"
+        ]
+        
+        import re
+        for pattern in title_patterns:
+            match = re.search(pattern, input_lower)
+            if match:
+                title_text = match.group(1).strip()
+                # Handle multiple titles separated by commas/and
+                title_candidates = re.split(r'[,\s+and\s+]', title_text)
+                for title in title_candidates:
+                    title = title.strip()
+                    if len(title) > 3:  # Titles are usually longer
+                        titles.append(title.title())
+                break
+        
+        # Remove duplicates while preserving order
+        unique_titles = list(dict.fromkeys(titles))
+        return unique_titles
+    
+    async def _handle_llm_skill_expansion_fallback(self, base_skills: List[str], session_state: Dict[str, Any],
+                                                 memory_context: List[Dict[str, Any]]) -> Content:
+        """Fallback to LLM-based skill expansion when matrix fails."""
+        try:
+            print(f"🔄 LLM SKILL EXPANSION FALLBACK for: {base_skills}")
+            
+            # Use the original LLM expansion method
+            for base_skill in base_skills:
+                expansion_result = await self._expand_skills_with_llm(base_skill, memory_context)
+                
+                if expansion_result["success"]:
+                    expanded_skills = expansion_result["expanded_skills"]
+                    
+                    # Apply expanded skills to session state
+                    modifications = []
+                    for skill in expanded_skills:
+                        if skill not in session_state.get('keywords', []):
+                            filter_result = await self.tools["filter_tool"](
+                                "add_skill", session_state, skill=skill, mandatory=False
+                            )
+                            if filter_result["success"]:
+                                modifications.extend(filter_result["modifications"])
+                    
+                    # Create UI-friendly data
+                    ui_expanded_skills = []
+                    for skill in expanded_skills:
+                        ui_expanded_skills.append({
+                            "name": skill,
+                            "score": 0.8,  # Default score for LLM
+                            "confidence": "medium",
+                            "method": "llm_analysis"
+                        })
+                    
+                    message = f"LLM analysis expanded '{base_skill}' to {len(expanded_skills)} related skills: {', '.join(expanded_skills)}"
+                    
+                    return self.create_content({
+                        "success": True,
+                        "expansion_type": "skill_expansion",
+                        "method": "llm_fallback",
+                        "base_skills": [base_skill],
+                        "expanded_skills": expanded_skills,
+                        "ui_expanded_skills": ui_expanded_skills,
+                        "modifications": modifications,
+                        "session_state": session_state,
+                        "message": message,
+                        "trigger_search": False,
+                        "fallback_used": True
+                    })
+            
+            # If LLM also fails, use hardcoded fallback
+            return await self._use_hardcoded_skill_fallback(base_skills, session_state)
+            
+        except Exception as e:
+            logger.error(f"LLM skill expansion fallback failed: {e}")
+            return await self._use_hardcoded_skill_fallback(base_skills, session_state)
+    
+    async def _handle_llm_title_expansion_fallback(self, base_titles: List[str], session_state: Dict[str, Any],
+                                                 memory_context: List[Dict[str, Any]]) -> Content:
+        """Fallback to LLM-based title expansion when matrix fails."""
+        try:
+            print(f"🔄 LLM TITLE EXPANSION FALLBACK for: {base_titles}")
+            
+            # Use the original LLM expansion method
+            for base_title in base_titles:
+                expansion_result = await self._expand_titles_with_llm(base_title, memory_context)
+                
+                if expansion_result["success"]:
+                    expanded_titles = expansion_result["expanded_titles"]
+                    suggested_skills = expansion_result.get("suggested_skills", [])
+                    
+                    # Apply suggested skills to session state
+                    modifications = []
+                    for skill in suggested_skills[:3]:  # Limit to 3 skills
+                        if skill not in session_state.get('keywords', []):
+                            filter_result = await self.tools["filter_tool"](
+                                "add_skill", session_state, skill=skill, mandatory=False
+                            )
+                            if filter_result["success"]:
+                                modifications.extend(filter_result["modifications"])
+                    
+                    # Create UI-friendly data
+                    ui_expanded_titles = []
+                    for title in expanded_titles:
+                        ui_expanded_titles.append({
+                            "name": title,
+                            "score": 0.8,
+                            "confidence": "medium",
+                            "method": "llm_analysis"
+                        })
+                    
+                    ui_suggested_skills = []
+                    for skill in suggested_skills:
+                        ui_suggested_skills.append({
+                            "name": skill,
+                            "score": 0.8,
+                            "confidence": "medium",
+                            "method": "llm_analysis"
+                        })
+                    
+                    message = f"LLM analysis expanded '{base_title}' to {len(expanded_titles)} related titles and added {len(suggested_skills[:3])} relevant skills"
+                    
+                    return self.create_content({
+                        "success": True,
+                        "expansion_type": "title_expansion",
+                        "method": "llm_fallback",
+                        "base_titles": [base_title],
+                        "expanded_titles": expanded_titles,
+                        "suggested_skills": suggested_skills[:3],
+                        "ui_expanded_titles": ui_expanded_titles,
+                        "ui_suggested_skills": ui_suggested_skills,
+                        "modifications": modifications,
+                        "session_state": session_state,
+                        "message": message,
+                        "trigger_search": False,
+                        "fallback_used": True
+                    })
+            
+            # If LLM also fails, use hardcoded fallback
+            return await self._use_hardcoded_title_fallback(base_titles, session_state)
+            
+        except Exception as e:
+            logger.error(f"LLM title expansion fallback failed: {e}")
+            return await self._use_hardcoded_title_fallback(base_titles, session_state)
+    
+    async def _use_hardcoded_skill_fallback(self, base_skills: List[str], session_state: Dict[str, Any]) -> Content:
+        """Final fallback using hardcoded skill mappings."""
+        try:
+            print(f"🔧 HARDCODED SKILL FALLBACK for: {base_skills}")
+            
+            # Use existing fallback method
+            for base_skill in base_skills:
+                fallback_result = self._fallback_skill_expansion(base_skill)
+                
+                if fallback_result["success"]:
+                    expanded_skills = fallback_result["expanded_skills"]
+                    
+                    # Apply expanded skills to session state
+                    modifications = []
+                    for skill in expanded_skills:
+                        if skill not in session_state.get('keywords', []):
+                            filter_result = await self.tools["filter_tool"](
+                                "add_skill", session_state, skill=skill, mandatory=False
+                            )
+                            if filter_result["success"]:
+                                modifications.extend(filter_result["modifications"])
+                    
+                    # Create UI-friendly data
+                    ui_expanded_skills = []
+                    for skill in expanded_skills:
+                        ui_expanded_skills.append({
+                            "name": skill,
+                            "score": 0.7,
+                            "confidence": "low",
+                            "method": "hardcoded_mapping"
+                        })
+                    
+                    message = f"Hardcoded mapping expanded '{base_skill}' to {len(expanded_skills)} related skills: {', '.join(expanded_skills)}"
+                    
+                    return self.create_content({
+                        "success": True,
+                        "expansion_type": "skill_expansion",
+                        "method": "hardcoded_fallback",
+                        "base_skills": [base_skill],
+                        "expanded_skills": expanded_skills,
+                        "ui_expanded_skills": ui_expanded_skills,
+                        "modifications": modifications,
+                        "session_state": session_state,
+                        "message": message,
+                        "trigger_search": False,
+                        "fallback_used": True
+                    })
+            
+            return self.create_content({
+                "success": False,
+                "error": "All skill expansion methods failed",
+                "message": "Unable to expand skills using any available method"
+            })
+            
+        except Exception as e:
+            logger.error(f"Hardcoded skill fallback failed: {e}")
+            return self.create_content({
+                "success": False,
+                "error": f"Hardcoded skill fallback failed: {str(e)}"
+            })
+    
+    async def _use_hardcoded_title_fallback(self, base_titles: List[str], session_state: Dict[str, Any]) -> Content:
+        """Final fallback using hardcoded title mappings."""
+        try:
+            print(f"🔧 HARDCODED TITLE FALLBACK for: {base_titles}")
+            
+            # Use existing fallback method
+            for base_title in base_titles:
+                fallback_result = self._fallback_title_expansion(base_title)
+                
+                if fallback_result["success"]:
+                    expanded_titles = fallback_result["expanded_titles"]
+                    suggested_skills = fallback_result.get("suggested_skills", [])
+                    
+                    # Apply suggested skills to session state
+                    modifications = []
+                    for skill in suggested_skills[:3]:  # Limit to 3 skills
+                        if skill not in session_state.get('keywords', []):
+                            filter_result = await self.tools["filter_tool"](
+                                "add_skill", session_state, skill=skill, mandatory=False
+                            )
+                            if filter_result["success"]:
+                                modifications.extend(filter_result["modifications"])
+                    
+                    # Create UI-friendly data
+                    ui_expanded_titles = []
+                    for title in expanded_titles:
+                        ui_expanded_titles.append({
+                            "name": title,
+                            "score": 0.7,
+                            "confidence": "low",
+                            "method": "hardcoded_mapping"
+                        })
+                    
+                    ui_suggested_skills = []
+                    for skill in suggested_skills:
+                        ui_suggested_skills.append({
+                            "name": skill,
+                            "score": 0.7,
+                            "confidence": "low",
+                            "method": "hardcoded_mapping"
+                        })
+                    
+                    message = f"Hardcoded mapping expanded '{base_title}' to {len(expanded_titles)} related titles and added {len(suggested_skills[:3])} relevant skills"
+                    
+                    return self.create_content({
+                        "success": True,
+                        "expansion_type": "title_expansion",
+                        "method": "hardcoded_fallback",
+                        "base_titles": [base_title],
+                        "expanded_titles": expanded_titles,
+                        "suggested_skills": suggested_skills[:3],
+                        "ui_expanded_titles": ui_expanded_titles,
+                        "ui_suggested_skills": ui_suggested_skills,
+                        "modifications": modifications,
+                        "session_state": session_state,
+                        "message": message,
+                        "trigger_search": False,
+                        "fallback_used": True
+                    })
+            
+            return self.create_content({
+                "success": False,
+                "error": "All title expansion methods failed",
+                "message": "Unable to expand titles using any available method"
+            })
+            
+        except Exception as e:
+            logger.error(f"Hardcoded title fallback failed: {e}")
+            return self.create_content({
+                "success": False,
+                "error": f"Hardcoded title fallback failed: {str(e)}"
+            })
+    
+    # Keep existing location expansion methods unchanged
     async def _handle_location_expansion(self, user_input: str, session_state: Dict[str, Any],
                                        memory_context: List[Dict[str, Any]], session_id: str, 
                                        user_id: str) -> Content:
-        """Handle location expansion using existing location tools."""
+        """Handle location expansion using existing location tools (unchanged)."""
+        # ... existing location expansion code remains the same ...
         try:
             print(f"🗺️ LOCATION EXPANSION: Analyzing '{user_input}'")
             
-            # Extract base location and analysis type
             location_info = self._extract_location_info(user_input, session_state)
             
             if not location_info["base_location"]:
@@ -208,7 +745,6 @@ class ExpansionAgent(BaseResDexAgent):
                     "message": "Please specify a location to expand (e.g., 'find nearby locations to Mumbai')"
                 })
             
-            # Use location tool for expansion
             location_result = await self.tools["location_tool"](
                 base_location=location_info["base_location"],
                 analysis_type=location_info["analysis_type"],
@@ -269,69 +805,12 @@ class ExpansionAgent(BaseResDexAgent):
                 "error": f"Location expansion failed: {str(e)}"
             })
     
-    async def _handle_title_expansion(self, user_input: str, session_state: Dict[str, Any],
-                                    memory_context: List[Dict[str, Any]], session_id: str, 
-                                    user_id: str) -> Content:
-        """Handle title/designation expansion using LLM."""
-        try:
-            print(f"💼 TITLE EXPANSION: Analyzing '{user_input}'")
-            
-            # Extract base title from input
-            base_title = self._extract_base_title(user_input, session_state)
-            
-            if not base_title:
-                return self.create_content({
-                    "success": False,
-                    "error": "No base title found for expansion",
-                    "message": "Please specify a job title to expand (e.g., 'find similar titles to data scientist')"
-                })
-            
-            # Use LLM for title expansion
-            expansion_result = await self._expand_titles_with_llm(base_title, memory_context)
-            
-            if not expansion_result["success"]:
-                return self.create_content(expansion_result)
-            
-            expanded_titles = expansion_result["expanded_titles"]
-            suggested_skills = expansion_result.get("suggested_skills", [])
-            
-            # Apply suggested skills from title expansion
-            modifications = []
-            for skill in suggested_skills[:3]:  # Limit to 3 skills
-                if skill not in session_state.get('keywords', []):
-                    filter_result = await self.tools["filter_tool"](
-                        "add_skill", session_state, skill=skill, mandatory=False
-                    )
-                    if filter_result["success"]:
-                        modifications.extend(filter_result["modifications"])
-            
-            message = f"Expanded '{base_title}' to {len(expanded_titles)} related titles and added {len(suggested_skills)} relevant skills"
-            
-            return self.create_content({
-                "success": True,
-                "expansion_type": "title_expansion",
-                "base_title": base_title,
-                "expanded_titles": expanded_titles,
-                "suggested_skills": suggested_skills,
-                "modifications": modifications,
-                "session_state": session_state,
-                "message": message,
-                "trigger_search": False
-            })
-            
-        except Exception as e:
-            logger.error(f"Title expansion failed: {e}")
-            return self.create_content({
-                "success": False,
-                "error": f"Title expansion failed: {str(e)}"
-            })
-    
     async def _handle_multi_expansion(self, user_input: str, session_state: Dict[str, Any],
                                     memory_context: List[Dict[str, Any]], session_id: str, 
                                     user_id: str) -> Content:
-        """Handle multiple expansion types in sequence."""
+        """Handle multiple expansion types in sequence with Matrix Features priority."""
         try:
-            print(f"🔄 MULTI-EXPANSION: Processing '{user_input}'")
+            print(f"🔄 ENHANCED MULTI-EXPANSION: Processing '{user_input}'")
             
             all_modifications = []
             expansion_results = []
@@ -339,26 +818,28 @@ class ExpansionAgent(BaseResDexAgent):
             # Determine which expansions are needed
             input_lower = user_input.lower()
             
-            # Skill expansion
+            # Skill expansion with Matrix Features
             if any(indicator in input_lower for indicator in ["skill", "similar skills", "related skills"]):
-                skill_result = await self._handle_skill_expansion(user_input, session_state, memory_context, session_id, user_id)
+                skill_result = await self._handle_matrix_skill_expansion(user_input, session_state, memory_context, session_id, user_id)
                 if skill_result.data.get("success"):
                     all_modifications.extend(skill_result.data.get("modifications", []))
-                    expansion_results.append(f"Skills: {skill_result.data.get('message', '')}")
+                    method = skill_result.data.get("method", "unknown")
+                    expansion_results.append(f"Skills ({method}): {skill_result.data.get('message', '')}")
             
-            # Location expansion
+            # Title expansion with Matrix Features
+            if any(indicator in input_lower for indicator in ["title", "role", "designation"]):
+                title_result = await self._handle_matrix_title_expansion(user_input, session_state, memory_context, session_id, user_id)
+                if title_result.data.get("success"):
+                    all_modifications.extend(title_result.data.get("modifications", []))
+                    method = title_result.data.get("method", "unknown")
+                    expansion_results.append(f"Titles ({method}): {title_result.data.get('message', '')}")
+            
+            # Location expansion (unchanged)
             if any(indicator in input_lower for indicator in ["location", "nearby", "similar cities"]):
                 location_result = await self._handle_location_expansion(user_input, session_state, memory_context, session_id, user_id)
                 if location_result.data.get("success"):
                     all_modifications.extend(location_result.data.get("modifications", []))
                     expansion_results.append(f"Locations: {location_result.data.get('message', '')}")
-            
-            # Title expansion
-            if any(indicator in input_lower for indicator in ["title", "role", "designation"]):
-                title_result = await self._handle_title_expansion(user_input, session_state, memory_context, session_id, user_id)
-                if title_result.data.get("success"):
-                    all_modifications.extend(title_result.data.get("modifications", []))
-                    expansion_results.append(f"Titles: {title_result.data.get('message', '')}")
             
             combined_message = " | ".join(expansion_results) if expansion_results else "Multi-expansion completed"
             
@@ -369,190 +850,63 @@ class ExpansionAgent(BaseResDexAgent):
                 "session_state": session_state,
                 "message": combined_message,
                 "trigger_search": False,
-                "expansion_count": len(expansion_results)
+                "expansion_count": len(expansion_results),
+                "enhanced_multi_expansion": True
             })
             
         except Exception as e:
-            logger.error(f"Multi-expansion failed: {e}")
+            logger.error(f"Enhanced multi-expansion failed: {e}")
             return self.create_content({
                 "success": False,
-                "error": f"Multi-expansion failed: {str(e)}"
+                "error": f"Enhanced multi-expansion failed: {str(e)}"
             })
     
     async def _handle_auto_expansion(self, user_input: str, session_state: Dict[str, Any],
-                                   memory_context: List[Dict[str, Any]], session_id: str, 
-                                   user_id: str) -> Content:
-        """Auto-detect and handle appropriate expansion type."""
+                               memory_context: List[Dict[str, Any]], session_id: str, 
+                               user_id: str) -> Content:
+        """Auto-detect expansion type - SIMPLIFIED."""
         try:
-            print(f"🔍 AUTO-EXPANSION: Detecting type for '{user_input}'")
+            print(f"🔍 AUTO-EXPANSION: '{user_input}'")
             
-            # Use LLM to auto-detect expansion type
-            detection_result = await self._auto_detect_expansion_type(user_input, memory_context)
+            # Simple detection
+            input_lower = user_input.lower()
             
-            if detection_result["success"]:
-                detected_type = detection_result["expansion_type"]
+            if any(word in input_lower for word in ["skill", "skills", "similar skills"]):
+                print(f"🎯 Detected skill expansion")
+                return await self._handle_matrix_skill_expansion(user_input, session_state, memory_context, session_id, user_id)
+            
+            elif any(word in input_lower for word in ["title", "titles", "role", "roles"]):
+                print(f"🎯 Detected title expansion")
+                return await self._handle_matrix_title_expansion(user_input, session_state, memory_context, session_id, user_id)
+            
+            elif any(word in input_lower for word in ["location", "city", "nearby"]):
+                print(f"🎯 Detected location expansion")
+                return await self._handle_location_expansion(user_input, session_state, memory_context, session_id, user_id)
+            
+            else:
+                # Default to skill expansion
+                print(f"🎯 Defaulting to skill expansion")
+                return await self._handle_matrix_skill_expansion(user_input, session_state, memory_context, session_id, user_id)
                 
-                if detected_type == "skill_expansion":
-                    return await self._handle_skill_expansion(user_input, session_state, memory_context, session_id, user_id)
-                elif detected_type == "location_expansion":
-                    return await self._handle_location_expansion(user_input, session_state, memory_context, session_id, user_id)
-                elif detected_type == "title_expansion":
-                    return await self._handle_title_expansion(user_input, session_state, memory_context, session_id, user_id)
-            
-            # If auto-detection fails, return helpful message
-            return self.create_content({
-                "success": True,
-                "expansion_type": "none_detected",
-                "message": "I can help expand skills, locations, or job titles. Try: 'find similar skills to python' or 'add nearby locations to Mumbai'",
-                "suggestions": [
-                    "Find similar skills to [skill name]",
-                    "Add nearby locations to [city name]", 
-                    "Expand titles related to [job title]"
-                ],
-                "modifications": [],
-                "session_state": session_state,
-                "trigger_search": False
-            })
-            
         except Exception as e:
-            logger.error(f"Auto-expansion failed: {e}")
             return self.create_content({
                 "success": False,
                 "error": f"Auto-expansion failed: {str(e)}"
             })
+    # Keep all existing helper methods (LLM expansion, location extraction, fallbacks, etc.)
     
-    # Helper methods for extraction and LLM calls
-    
-    def _extract_base_skill(self, user_input: str, session_state: Dict[str, Any]) -> str:
-        """Extract base skill from user input or session state."""
-        input_lower = user_input.lower()
-        
-        # Look for skill patterns in input
-        skill_patterns = [
-            r"skills? (?:to|like|similar to) ([a-zA-Z+#.]+)",
-            r"expand ([a-zA-Z+#.]+)",
-            r"similar to ([a-zA-Z+#.]+)",
-            r"like ([a-zA-Z+#.]+)"
-        ]
-        
-        import re
-        for pattern in skill_patterns:
-            match = re.search(pattern, input_lower)
-            if match:
-                return match.group(1).title()
-        
-        # Fallback to last skill in session state
-        keywords = session_state.get('keywords', [])
-        if keywords:
-            return keywords[-1].replace('★ ', '')
-        
-        return ""
-    
-    def _extract_location_info(self, user_input: str, session_state: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract location and analysis type from user input with enhanced patterns."""
-        input_lower = user_input.lower()
-        
-        # ENHANCED: More comprehensive location extraction patterns
-        location_patterns = [
-            r"nearby to ([a-zA-Z\s]+)",                    # "nearby to Hyderabad"
-            r"near ([a-zA-Z\s]+)",                         # "near Mumbai" 
-            r"around ([a-zA-Z\s]+)",                       # "around Delhi"
-            r"based (?:in|at|near) ([a-zA-Z\s]+)",        # "based in Bangalore"
-            r"(?:to|from) ([a-zA-Z\s]+)",                  # Generic "to Hyderabad"
-            r"locations? (?:to|like|similar to) ([a-zA-Z\s]+)"  # "locations similar to Chennai"
-        ]
-        
-        base_location = ""
-        import re
-        
-        for pattern in location_patterns:
-            match = re.search(pattern, input_lower)
-            if match:
-                location_candidate = match.group(1).strip().title()
-                
-                # CRITICAL: Validate it's actually a city name, not a skill
-                if self._is_valid_city_name(location_candidate):
-                    base_location = location_candidate
-                    print(f"✅ EXTRACTED LOCATION: '{base_location}' using pattern: {pattern}")
-                    break
-                else:
-                    print(f"⚠️ REJECTED: '{location_candidate}' - not a valid city")
-        
-        # Fallback to session state
-        if not base_location:
-            current_cities = session_state.get('current_cities', [])
-            if current_cities:
-                base_location = current_cities[-1]
-                print(f"🔄 FALLBACK TO SESSION STATE: {base_location}")
-        
-        # Determine analysis type
-        analysis_type = "similar"
-        if "nearby" in input_lower or "close" in input_lower or "near" in input_lower:
-            analysis_type = "nearby"
-        elif "tech hub" in input_lower or "it hub" in input_lower:
-            analysis_type = "industry_hubs"
-        
-        print(f"🎯 FINAL LOCATION EXTRACTION: base='{base_location}', type='{analysis_type}'")
-        
-        return {
-            "base_location": base_location,
-            "analysis_type": analysis_type
-        }
-
-    def _is_valid_city_name(self, candidate: str) -> bool:
-        """Check if the candidate is a valid city name."""
-        from ...utils.constants import CITIES, TECH_SKILLS
-        
-        # Check against known cities
-        if candidate in CITIES:
-            return True
-        
-        # Check if it's obviously a tech skill (to avoid confusion)
-        if candidate in TECH_SKILLS:
-            return False
-        
-        # Check length and format (cities are usually 2+ words or meaningful names)
-        if len(candidate) >= 3 and candidate.replace(' ', '').isalpha():
-            return True
-        
-        return False
-    def _extract_base_title(self, user_input: str, session_state: Dict[str, Any]) -> str:
-        """Extract base job title from user input."""
-        input_lower = user_input.lower()
-        
-        # Look for title patterns
-        title_patterns = [
-            r"titles? (?:to|like|similar to) ([a-zA-Z\s]+)",
-            r"roles? (?:to|like|similar to) ([a-zA-Z\s]+)",
-            r"designations? (?:to|like|similar to) ([a-zA-Z\s]+)",
-            r"expand ([a-zA-Z\s]+) (?:title|role|designation)"
-        ]
-        
-        import re
-        for pattern in title_patterns:
-            match = re.search(pattern, input_lower)
-            if match:
-                return match.group(1).strip().title()
-        
-        return ""
-    
-    # In resdex_agent/sub_agents/expansion/agent.py
     async def _expand_skills_with_llm(self, base_skill: str, memory_context: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Use LLM to expand skills with robust parsing."""
+        """Use LLM to expand skills (existing method for fallback)."""
         prompt = f"""You are a skills expansion expert. Find 4-5 related/similar skills to "{base_skill}" for tech recruitment.
 
-    Base Skill: {base_skill}
+Base Skill: {base_skill}
 
-    CRITICAL: Return ONLY valid JSON in this EXACT format:
-    {{
-        "base_skill": "{base_skill}",
-        "expanded_skills": ["skill1", "skill2", "skill3", "skill4"],
-        "reasoning": "brief explanation"
-    }}
-
-    Examples:
-    Python → {{"base_skill": "Python", "expanded_skills": ["Django", "Flask", "FastAPI", "Pandas"], "reasoning": "Web frameworks and data science tools"}}
-    React → {{"base_skill": "React", "expanded_skills": ["JavaScript", "TypeScript", "Redux", "Next.js"], "reasoning": "Core JS ecosystem and React frameworks"}}"""
+CRITICAL: Return ONLY valid JSON in this EXACT format:
+{{
+    "base_skill": "{base_skill}",
+    "expanded_skills": ["skill1", "skill2", "skill3", "skill4"],
+    "reasoning": "brief explanation"
+}}"""
 
         try:
             llm_result = await self.tools["llm_tool"]._call_llm_direct(
@@ -560,59 +914,21 @@ class ExpansionAgent(BaseResDexAgent):
                 task="skill_expansion"
             )
             
-            if llm_result["success"]:
-                # ENHANCED: Handle both object and array responses
-                if "parsed_response" in llm_result and llm_result["parsed_response"]:
-                    parsed = llm_result["parsed_response"]
-                    
-                    # If it's the expected object format
-                    if isinstance(parsed, dict) and "expanded_skills" in parsed:
-                        return {
-                            "success": True,
-                            "expanded_skills": parsed["expanded_skills"]
-                        }
-                    # If LLM returned just the array
-                    elif isinstance(parsed, list):
-                        print(f"🔧 LLM returned array format, converting: {parsed}")
-                        return {
-                            "success": True,
-                            "expanded_skills": parsed
-                        }
+            if llm_result["success"] and "parsed_response" in llm_result and llm_result["parsed_response"]:
+                parsed = llm_result["parsed_response"]
+                return {
+                    "success": True,
+                    "expanded_skills": parsed.get("expanded_skills", [])
+                }
+            else:
+                return self._fallback_skill_expansion(base_skill)
                 
-                # Try manual parsing from response_text
-                elif "response_text" in llm_result:
-                    import json
-                    response_text = llm_result["response_text"].strip()
-                    
-                    # Try parsing as object first
-                    try:
-                        parsed = json.loads(response_text)
-                        if isinstance(parsed, dict) and "expanded_skills" in parsed:
-                            return {"success": True, "expanded_skills": parsed["expanded_skills"]}
-                        elif isinstance(parsed, list):
-                            return {"success": True, "expanded_skills": parsed}
-                    except json.JSONDecodeError:
-                        pass
-                    
-                    # Try extracting array pattern
-                    import re
-                    array_match = re.search(r'\[[\s\S]*?\]', response_text)
-                    if array_match:
-                        try:
-                            skills_array = json.loads(array_match.group(0))
-                            return {"success": True, "expanded_skills": skills_array}
-                        except json.JSONDecodeError:
-                            pass
-            
-            # Fallback
-            return self._fallback_skill_expansion(base_skill)
-                    
         except Exception as e:
             logger.error(f"LLM skill expansion failed: {e}")
             return self._fallback_skill_expansion(base_skill)
     
     async def _expand_titles_with_llm(self, base_title: str, memory_context: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Use LLM to expand job titles."""
+        """Use LLM to expand job titles (existing method for fallback)."""
         prompt = f"""You are a job title expansion expert. Find related job titles and suggest relevant skills for "{base_title}".
 
 Base Title: {base_title}
@@ -623,10 +939,7 @@ Return ONLY JSON:
     "expanded_titles": ["title1", "title2", "title3"],
     "suggested_skills": ["skill1", "skill2", "skill3", "skill4"],
     "reasoning": "brief explanation"
-}}
-
-Examples:
-Data Scientist → titles: ["ML Engineer", "Data Analyst", "AI Researcher"], skills: ["Python", "SQL", "Machine Learning", "Statistics"]"""
+}}"""
 
         try:
             llm_result = await self.tools["llm_tool"]._call_llm_direct(
@@ -648,36 +961,66 @@ Data Scientist → titles: ["ML Engineer", "Data Analyst", "AI Researcher"], ski
             logger.error(f"LLM title expansion failed: {e}")
             return self._fallback_title_expansion(base_title)
     
-    async def _auto_detect_expansion_type(self, user_input: str, memory_context: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Use LLM to auto-detect expansion type."""
-        prompt = f"""Detect what type of expansion the user wants: skill, location, or title.
+    def _extract_location_info(self, user_input: str, session_state: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract location and analysis type from user input."""
+        input_lower = user_input.lower()
+        
+        # Location extraction patterns
+        location_patterns = [
+            r"nearby to ([a-zA-Z\s]+)",
+            r"near ([a-zA-Z\s]+)",
+            r"around ([a-zA-Z\s]+)",
+            r"based (?:in|at|near) ([a-zA-Z\s]+)",
+            r"(?:to|from) ([a-zA-Z\s]+)",
+            r"locations? (?:to|like|similar to) ([a-zA-Z\s]+)"
+        ]
+        
+        base_location = ""
+        import re
+        
+        for pattern in location_patterns:
+            match = re.search(pattern, input_lower)
+            if match:
+                location_candidate = match.group(1).strip().title()
+                if self._is_valid_city_name(location_candidate):
+                    base_location = location_candidate
+                    break
+        
+        # Fallback to session state
+        if not base_location:
+            current_cities = session_state.get('current_cities', [])
+            if current_cities:
+                base_location = current_cities[-1]
+        
+        # Determine analysis type
+        analysis_type = "similar"
+        if "nearby" in input_lower or "close" in input_lower or "near" in input_lower:
+            analysis_type = "nearby"
+        elif "tech hub" in input_lower or "it hub" in input_lower:
+            analysis_type = "industry_hubs"
+        
+        return {
+            "base_location": base_location,
+            "analysis_type": analysis_type
+        }
 
-User input: "{user_input}"
-
-Return ONLY JSON:
-{{
-    "expansion_type": "skill_expansion|location_expansion|title_expansion|none",
-    "confidence": 0.0-1.0,
-    "reasoning": "brief explanation"
-}}"""
-
-        try:
-            llm_result = await self.tools["llm_tool"]._call_llm_direct(
-                prompt=prompt,
-                task="expansion_detection"
-            )
-            
-            if llm_result["success"] and "parsed_response" in llm_result:
-                return {
-                    "success": True,
-                    "expansion_type": llm_result["parsed_response"].get("expansion_type", "none")
-                }
-            else:
-                return {"success": False, "expansion_type": "none"}
-                
-        except Exception as e:
-            logger.error(f"Auto-detection failed: {e}")
-            return {"success": False, "expansion_type": "none"}
+    def _is_valid_city_name(self, candidate: str) -> bool:
+        """Check if the candidate is a valid city name."""
+        from ...utils.constants import CITIES, TECH_SKILLS
+        
+        # Check against known cities
+        if candidate in CITIES:
+            return True
+        
+        # Check if it's obviously a tech skill (to avoid confusion)
+        if candidate in TECH_SKILLS:
+            return False
+        
+        # Check length and format
+        if len(candidate) >= 3 and candidate.replace(' ', '').isalpha():
+            return True
+        
+        return False
     
     def _fallback_skill_expansion(self, base_skill: str) -> Dict[str, Any]:
         """Fallback skill expansion with hardcoded mappings."""
@@ -687,7 +1030,12 @@ Return ONLY JSON:
             "react": ["JavaScript", "TypeScript", "Redux", "Next.js", "Node.js"],
             "javascript": ["React", "Vue.js", "Angular", "Node.js", "TypeScript"],
             "sql": ["MySQL", "PostgreSQL", "Oracle", "MongoDB", "Redis"],
-            "aws": ["Docker", "Kubernetes", "Terraform", "Jenkins", "DevOps"]
+            "aws": ["Docker", "Kubernetes", "Terraform", "Jenkins", "DevOps"],
+            "machine learning": ["Python", "TensorFlow", "PyTorch", "Scikit-learn", "Pandas"],
+            "data science": ["Python", "R", "SQL", "Tableau", "Statistics"],
+            "devops": ["Docker", "Kubernetes", "Jenkins", "AWS", "Terraform"],
+            "frontend": ["React", "Vue.js", "Angular", "CSS", "JavaScript"],
+            "backend": ["Node.js", "Express", "API", "Database", "Server"]
         }
         
         expanded = skill_mappings.get(base_skill.lower(), [base_skill])
@@ -700,16 +1048,32 @@ Return ONLY JSON:
         """Fallback title expansion with hardcoded mappings."""
         title_mappings = {
             "data scientist": {
-                "titles": ["ML Engineer", "Data Analyst", "AI Researcher"],
-                "skills": ["Python", "SQL", "Machine Learning", "Statistics"]
+                "titles": ["ML Engineer", "Data Analyst", "AI Researcher", "Business Intelligence Analyst"],
+                "skills": ["Python", "SQL", "Machine Learning", "Statistics", "Pandas"]
             },
             "software engineer": {
-                "titles": ["Developer", "Software Developer", "Programmer"],
-                "skills": ["Java", "Python", "JavaScript", "React"]
+                "titles": ["Developer", "Software Developer", "Programmer", "Full Stack Developer"],
+                "skills": ["Java", "Python", "JavaScript", "React", "SQL"]
             },
             "devops engineer": {
-                "titles": ["Site Reliability Engineer", "Infrastructure Engineer", "Cloud Engineer"],
-                "skills": ["AWS", "Docker", "Kubernetes", "Jenkins"]
+                "titles": ["Site Reliability Engineer", "Infrastructure Engineer", "Cloud Engineer", "Platform Engineer"],
+                "skills": ["AWS", "Docker", "Kubernetes", "Jenkins", "Terraform"]
+            },
+            "frontend developer": {
+                "titles": ["UI Developer", "React Developer", "Web Developer", "JavaScript Developer"],
+                "skills": ["React", "JavaScript", "CSS", "HTML", "TypeScript"]
+            },
+            "backend developer": {
+                "titles": ["API Developer", "Server Developer", "Database Developer", "Microservices Developer"],
+                "skills": ["Node.js", "Java", "Python", "SQL", "REST API"]
+            },
+            "full stack developer": {
+                "titles": ["Software Developer", "Web Developer", "Application Developer", "Tech Lead"],
+                "skills": ["React", "Node.js", "JavaScript", "SQL", "AWS"]
+            },
+            "product manager": {
+                "titles": ["Product Owner", "Business Analyst", "Project Manager", "Strategy Manager"],
+                "skills": ["Agile", "Scrum", "Analytics", "Product Strategy", "Roadmapping"]
             }
         }
         
@@ -720,16 +1084,16 @@ Return ONLY JSON:
         
         return {
             "success": True,
-            "expanded_titles": mapping["titles"],
-            "suggested_skills": mapping["skills"]
+            "expanded_titles": mapping["titles"][:self.config.max_titles_expansion],
+            "suggested_skills": mapping["skills"][:5]
         }
     
     def extract_memory_search_terms(self, content: Content) -> str:
-        """Extract search terms for memory context - expansion agent specific."""
+        """Extract search terms for memory context - enhanced expansion agent specific."""
         user_input = content.data.get("user_input", "")
         
         # Focus on expansion-related terms
-        expansion_keywords = ["expand", "similar", "related", "nearby", "like"]
+        expansion_keywords = ["expand", "similar", "related", "nearby", "like", "matrix", "skill", "title"]
         words = user_input.lower().split()
         
         # Extract expansion type and target
