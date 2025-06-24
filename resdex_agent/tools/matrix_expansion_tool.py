@@ -46,11 +46,9 @@ class MatrixExpansionTool(Tool):
                 cls._instance = super(MatrixExpansionTool, cls).__new__(cls)
             return cls._instance
     
-    def __init__(cls, name: str = "matrix_expansion_tool"):
+    def __init__(self, name: str = "matrix_expansion_tool"):
         # Only initialize once
-        from MatrixFeatures import MatrixFeatures
-        cls._matrix_features = MatrixFeatures()
-        if cls._initialized:
+        if self._initialized:
             print(f"🔄 MatrixExpansionTool: Reusing existing matrix system (no reload)")
             super().__init__(name=name, description="Matrix-based skill and title expansion")
             return
@@ -58,12 +56,14 @@ class MatrixExpansionTool(Tool):
         super().__init__(name=name, description="Matrix-based skill and title expansion")
         
         # Initialize matrix system only once
-        cls._initialize_matrix_system_once()
-        cls._initialized = True
+        self._initialize_matrix_system_once()
+        self._initialized = True
     
     @classmethod
     def _initialize_matrix_system_once(cls):
         """Initialize matrix system only once for all instances."""
+        if cls._initialized:
+            return
             
         try:
             print("🔧 MatrixExpansionTool: First-time initialization (loading matrices...)")
@@ -77,6 +77,36 @@ class MatrixExpansionTool(Tool):
             if current_dir not in sys.path:
                 sys.path.insert(0, current_dir)
                 print(f"✅ Added tools directory to Python path")
+            
+            # Step 1: Import MatrixFeatures from tools/MatrixFeatures.py
+            try:
+                print("📦 Step 1: Importing MatrixFeatures from tools/MatrixFeatures.py...")
+                from MatrixFeatures import MatrixFeatures
+                cls._matrix_features = MatrixFeatures()
+                print("✅ MatrixFeatures imported and initialized successfully")
+            except ImportError as e:
+                print(f"❌ MatrixFeatures import failed: {e}")
+                raise ImportError(f"Could not import MatrixFeatures from tools: {e}")
+            
+            # Step 2: Import FeatureMatrixLoader from tools/FeatureMatrixLoader.py
+            try:
+                print("📦 Step 2: Importing FeatureMatrixLoader from tools/FeatureMatrixLoader.py...")
+                from FeatureMatrixLoader import FeatureMatrixLoader
+                cls._feature_matrix_loader = FeatureMatrixLoader()
+                print("✅ FeatureMatrixLoader imported and initialized successfully")
+            except ImportError as e:
+                print(f"⚠️ FeatureMatrixLoader import failed: {e}")
+                cls._feature_matrix_loader = None
+            
+            # Step 3: Try to import SkillConvertor from taxonomy
+            try:
+                print("📦 Step 3: Importing SkillConvertor from taxonomy...")
+                from taxonomy.common_functions import SkillConvertor
+                cls._skill_convertor = SkillConvertor()
+                print("✅ SkillConvertor imported from installed taxonomy package")
+            except ImportError as e:
+                print(f"⚠️ SkillConvertor import failed: {e}")
+                cls._skill_convertor = None
             
             # Step 4: Verify MatrixFeatures has the required methods
             print("🔍 Step 4: Verifying MatrixFeatures methods...")
@@ -178,7 +208,7 @@ class MatrixExpansionTool(Tool):
             match = re.search(pattern, input_lower)
             if match:
                 skill_text = match.group(1).strip()
-                print(f"  ✅ Pattern {i+1} matched: {skill_text}")
+                print(f"  ✅ Pattern {i+1} matched: '{skill_text}'")
                 
                 # FIXED: Don't split single words - they're already extracted correctly
                 if ' ' in skill_text or ',' in skill_text:
@@ -192,7 +222,7 @@ class MatrixExpansionTool(Tool):
                 
                 for skill in skill_candidates:
                     skill = skill.strip()
-                    print(f"    - Processing candidate: {skill}")
+                    print(f"    - Processing candidate: '{skill}'")
                     
                     # CRITICAL FIX: Better validation and cleaning
                     if len(skill) > 1 and not skill in ['to', 'and', 'or', 'the', 'a', 'an']:
@@ -200,11 +230,11 @@ class MatrixExpansionTool(Tool):
                         cleaned_skill = self._clean_skill_name(skill)
                         if cleaned_skill:
                             skills.append(cleaned_skill)
-                            print(f"    ✅ Added skill: {cleaned_skill}")
+                            print(f"    ✅ Added skill: '{cleaned_skill}'")
                         else:
-                            print(f"    ❌ Rejected after cleaning: {skill}")
+                            print(f"    ❌ Rejected after cleaning: '{skill}'")
                     else:
-                        print(f"    ❌ Rejected (too short or stop word): {skill}")
+                        print(f"    ❌ Rejected (too short or stop word): '{skill}'")
                 break
         
         # If no skills found in input, check session state
