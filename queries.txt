@@ -1,55 +1,52 @@
-# SINGLE TOOL - NO MEMORY (10 queries)
-# Each query tests one operation with fresh state
+# Enhanced ResDex Agent Test Queries
+# Total: 40 queries across 4 types
+# Each type tests different aspects of the agent architecture
 
-1. Show me Python developers
-2. I need 5+ years experience
-3. Salary range 8-15 LPA please
-4. Find candidates in Bangalore
-5. Similar skills to React?
-6. Locations near Mumbai
-7. Search for profiles now
-8. Need Java developers
-9. Experience atleast 3 years
-10. Budget is 10-20 lakhs
+# TYPE 1: Single Tool, No Memory (10 queries)
+add python skill
+set experience to 5 years
+add bangalore location
+set salary range 10-20 lpa
+make java mandatory
+remove react skill
+add mumbai and delhi
+set experience 3-8 years
+add nodejs skill
+search for candidates now
 
-# SINGLE TOOL - WITH MEMORY (10 queries)  
-# Each query builds on previous state in sequence
+# TYPE 2: Single Tool, With Memory (10 queries)
+add the same skills we discussed
+use previous salary range
+add skills similar to what we used before
+include the cities from our last search
+make those skills mandatory like before
+repeat the same filter setup
+add experience range we had earlier
+use the locations from previous query
+apply filters like last time
+search with our usual criteria
 
-11. Also add Node.js skills
-12. Remove Python from search
-13. Increase experience to 7 years
-14. Add Chennai location too
-15. Make React mandatory skill
-16. Also check Pune candidates
-17. Reduce salary to 12 lakhs max
-18. Add Spring Boot skill
-19. Remove Bangalore from list
-20. Search with current filters
+# TYPE 3: Multi Tool, No Memory (10 queries)
+find similar skills to python and set experience 5+ years
+add react skills and search candidates in bangalore
+expand java skills and add nearby cities to mumbai
+find titles similar to data scientist and add relevant skills
+get skills for frontend developer and set salary 8-15 lpa
+find similar titles to software engineer and search
+expand python skills and add 3+ years experience
+find nearby locations to delhi and add devops skills
+get related skills to machine learning and search candidates
+find similar roles to product manager and set experience
 
-# MULTI TOOL - NO MEMORY (10 queries)
-# Each query involves multiple operations with fresh state
+# TYPE 4: Multi Tool, With Memory (10 queries)
+expand the skills we discussed and add similar cities
+find titles similar to our previous role and search
+get related skills like before and add nearby locations
+expand our usual skills and increase experience range
+find similar titles to what we used and add skills
+get nearby cities like last time and search candidates
+expand skills from previous query and set salary
+find related roles and add the locations we mentioned
+get similar skills and search with our filters
+expand previous titles and add experience like before
 
-21. Python developers in Bangalore with 5+ years
-22. React and Node.js profiles near Mumbai, 8-15 LPA
-23. Java experts in Chennai, experience 3-7 years, search now
-24. Find similar skills to Python, locations near Delhi
-25. DevOps engineers 6+ years, Hyderabad area, 15-25 lakhs
-26. Frontend developers with React, Pune/Mumbai, immediate search
-27. Backend developers, Java/Spring, Bangalore nearby, 4+ years
-28. Full stack profiles, salary 12-18 LPA, NCR region
-29. Data scientists near Hyderabad, 5+ experience, search
-30. Angular developers in tech cities, 3-8 years, 10-20 LPA
-
-# MULTI TOOL - WITH MEMORY (10 queries)
-# Each query builds on accumulated state with multiple operations
-
-31. Add Angular skills and increase salary to 20 lakhs
-32. Include Kolkata locations and reduce experience to 2 years  
-33. Remove old skills, add AI/ML, search in current cities
-34. Add Docker skills, include NCR locations, search immediately
-35. Change salary to 15-30 lakhs, add Gurgaon, remove Chennai
-36. Include cloud skills, expand to nearby tech hubs, search
-37. Add mobile development skills and tier-1 cities
-38. Modify experience 8+ years, include fintech skills, search now
-39. Add remote locations, include consulting skills, higher budget
-40. Final search with DevOps skills in all current locations

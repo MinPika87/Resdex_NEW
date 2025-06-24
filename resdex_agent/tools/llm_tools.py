@@ -271,10 +271,12 @@ CRITICAL RULES:
 2. For single action: return one object
 3. For multiple actions: return array of objects
 4. **SEARCH EXECUTION**: When user says "execute search", "search now", "trigger search", etc.
+
 SEARCH EXECUTION SPECIAL HANDLING:
 If user request contains search execution keywords like:
 - "execute search", "trigger search", "search now", "run search"
 - "find candidates", "show results", "get candidates"
+- "show me", "find now"
 
 Return:
 {{
