@@ -1,0 +1,149 @@
+================================================================================
+ENHANCED RESDEX AGENT TEST RESULTS
+================================================================================
+
+OVERALL SUMMARY:
+Total Queries: 20
+Passed: 6
+Failed: 14
+Success Rate: 30.0%
+Total Time: 1270.224s
+Average Time: 63.511s
+
+TYPE 1: SINGLE TOOL + NO MEMORY:
+  Queries: 11
+  Passed: 6
+  Success Rate: 54.5%
+  Total Time: 563.418s
+  Average Time: 51.220s
+
+TYPE 3: MULTI TOOL + NO MEMORY:
+  Queries: 9
+  Passed: 0
+  Success Rate: 0.0%
+  Total Time: 706.806s
+  Average Time: 78.534s
+
+AGENT USAGE STATISTICS:
+  search_interaction: 8 queries
+  general_query: 8 queries
+  unknown: 4 queries
+
+TOOL USAGE STATISTICS:
+  Memory Usage: 0 queries
+  Expansion Usage: 0 queries
+
+FAILED TEST DETAILS:
+========================================
+
+Test 5: Type 1: Single Tool + No Memory
+Query: make java mandatory
+Expected: Skill made mandatory: Java
+Actual: Skill added: Java*
+Agent: search_interaction
+Time: 44.057s
+----------------------------------------
+
+Test 6: Type 1: Single Tool + No Memory
+Query: remove react skill
+Expected: Skill removed: React
+Actual: No actions taken
+Agent: search_interaction
+Time: 107.776s
+----------------------------------------
+
+Test 7: Type 1: Single Tool + No Memory
+Query: add mumbai and delhi
+Expected: Location added: Mumbai; Location added: Delhi
+Actual: No actions taken
+Agent: general_query
+Time: 35.838s
+----------------------------------------
+
+Test 10: Type 1: Single Tool + No Memory
+Query: search for candidates now
+Expected: Search executed
+Actual: Error processing query: 'str' object has no attribute 'get'
+Agent: unknown
+Time: 26.031s
+----------------------------------------
+
+Test 11: Type 3: Multi Tool + No Memory
+Query: find similar skills to python and set experience 5+ years
+Expected: Skills expanded: Django, Flask, Pandas; Experience set: 5-10 years
+Actual: Skill added: Django; Skill added: Machine Learning; Skill added: Flask; Skill added: Pyspark; Skill added: Natural Language Processing; Experience set: 5-8 years
+Agent: general_query
+Time: 44.237s
+----------------------------------------
+
+Test 12: Type 1: Single Tool + No Memory
+Query: add react skills and search candidates in bangalore
+Expected: Skills expanded: JavaScript, TypeScript, Redux; Location added: Bangalore; Search executed
+Actual: Error processing query: 'str' object has no attribute 'get'
+Agent: unknown
+Time: 38.324s
+----------------------------------------
+
+Test 13: Type 3: Multi Tool + No Memory
+Query: expand java skills and add nearby cities to mumbai
+Expected: Skills expanded: Spring, Hibernate, Maven; Locations expanded: Thane, Pune, Nashik
+Actual: Skill added: Spring Boot; Skill added: Spring; Skill added: Hibernate; Skill added: Microservices; Skill added: Spring MVC; Location added: Mumbai; Location added: Thane; Location added: Navi Mumbai; Location added: Pune; Location added: Ahmednagar
+Agent: general_query
+Time: 111.394s
+----------------------------------------
+
+Test 14: Type 3: Multi Tool + No Memory
+Query: find titles similar to data scientist and add relevant skills
+Expected: Titles expanded: ML Engineer, Data Analyst; Skills suggested: Python, SQL
+Actual: Skill added: J2Ee
+Agent: general_query
+Time: 34.167s
+----------------------------------------
+
+Test 15: Type 3: Multi Tool + No Memory
+Query: get skills for frontend developer and set salary 8-15 lpa
+Expected: Skills suggested: React, JavaScript; Salary range set: 8-15 LPA
+Actual: Salary range set: 8-15 LPA
+Agent: general_query
+Time: 54.802s
+----------------------------------------
+
+Test 16: Type 3: Multi Tool + No Memory
+Query: find similar titles to software engineer and search
+Expected: Titles expanded: Developer, Programmer; Search executed
+Actual: Error processing query: 'str' object has no attribute 'get'
+Agent: unknown
+Time: 35.935s
+----------------------------------------
+
+Test 17: Type 3: Multi Tool + No Memory
+Query: expand python skills and add 3+ years experience
+Expected: Skills expanded: Django, Flask, Pandas; Experience set: 3-10 years
+Actual: Experience set: 3-8 years
+Agent: general_query
+Time: 71.561s
+----------------------------------------
+
+Test 18: Type 3: Multi Tool + No Memory
+Query: find nearby locations to delhi and add devops skills
+Expected: Locations expanded: Gurgaon, Noida, Faridabad; Skill added: DevOps
+Actual: Location added: Delhi; Location added: Gurgaon; Location added: Noida; Location added: Faridabad; Location added: Ghaziabad; Skill added: DevOps
+Agent: general_query
+Time: 185.798s
+----------------------------------------
+
+Test 19: Type 3: Multi Tool + No Memory
+Query: get related skills to machine learning and search candidates
+Expected: Skills expanded: Python, TensorFlow, PyTorch; Search executed
+Actual: Error processing query: 'str' object has no attribute 'get'
+Agent: unknown
+Time: 38.978s
+----------------------------------------
+
+Test 20: Type 3: Multi Tool + No Memory
+Query: find similar roles to product manager and set experience
+Expected: Titles expanded: Product Owner, Business Analyst; Experience set: 0-10 years
+Actual: No actions taken
+Agent: general_query
+Time: 129.934s
+----------------------------------------

@@ -247,7 +247,7 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         return await self._execute_original_logic(content, session_id, user_id)
     
     async def _try_intelligent_routing(self, content: Content, session_id: str, user_id: str) -> Content:
-        """NEW: Intelligent multi-intent orchestration."""
+        """NEW: Intelligent multi-intent orchestration with proper intent analysis."""
         user_input = content.data.get("user_input", "")
         session_state = content.data.get("session_state", {})
         
@@ -256,33 +256,73 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         
         print(f"🔍 INTENT BREAKDOWN RESULT: {intent_breakdown}")
         
-        # FIX: Actually execute orchestration when multi-intent is detected
-        if intent_breakdown["success"] and intent_breakdown.get("is_multi_intent", False):
-            if session_id:
-                step_logger.log_step(f"🔗 Multi-intent detected: {intent_breakdown['total_intents']} intents", "orchestration")
+        # CRITICAL FIX: Check if we have valid intent analysis
+        if intent_breakdown["success"] and intent_breakdown.get("intents"):
+            intents = intent_breakdown.get("intents", [])
             
-            print(f"🎯 EXECUTING MULTI-INTENT ORCHESTRATION")
+            # If we have intents from LLM analysis, use them for routing
+            if len(intents) > 0:
+                first_intent = intents[0]
+                target_agent = first_intent.get("target_agent")
+                intent_type = first_intent.get("intent_type")
+                
+                print(f"🎯 LLM ANALYSIS ROUTING: target_agent={target_agent}, intent_type={intent_type}")
+                
+                # FIXED: Route based on LLM analysis instead of fallback logic
+                if target_agent == "expansion":
+                    if session_id:
+                        step_logger.log_step("🎯 Routing to ExpansionAgent (LLM Analysis)", "routing")
+                    return await self._route_to_agent("expansion", content, session_id)
+                
+                elif target_agent == "search_interaction":
+                    if session_id:
+                        step_logger.log_step("🎯 Routing to SearchInteractionAgent (LLM Analysis)", "routing")
+                    return await self._route_to_agent("search_interaction", content, session_id)
+                
+                elif target_agent == "general_query":
+                    if session_id:
+                        step_logger.log_step("🎯 Routing to GeneralQueryAgent (LLM Analysis)", "routing")
+                    return await self._route_to_agent("general_query", content, session_id)
             
-            # THIS IS THE KEY FIX: Actually call the orchestration method
-            return await self._execute_multi_intent_orchestration(
-                intent_breakdown, user_input, session_state, session_id, user_id
-            )
+            # Execute orchestration when multi-intent is detected
+            if intent_breakdown.get("is_multi_intent", False):
+                if session_id:
+                    step_logger.log_step(f"🔗 Multi-intent detected: {intent_breakdown['total_intents']} intents", "orchestration")
+                
+                print(f"🎯 EXECUTING MULTI-INTENT ORCHESTRATION")
+                
+                return await self._execute_multi_intent_orchestration(
+                    intent_breakdown, user_input, session_state, session_id, user_id
+                )
         
-        # Only fall through to single-intent routing if NOT multi-intent
-        print(f"🔄 SINGLE INTENT ROUTING (multi-intent not detected)")
+        # FALLBACK: Only use keyword-based routing if LLM analysis fails
+        print(f"🔄 FALLBACK ROUTING (LLM analysis failed or no intents)")
         
-        # STEP 2: Single Intent Routing (existing logic)
+        # STEP 2: Enhanced Single Intent Routing with expansion support (FALLBACK ONLY)
         input_lower = user_input.lower()
         
-        # Route to ExpansionAgent if available
+        # Route to ExpansionAgent for all expansion types
         if "expansion" in self.sub_agents:
             expansion_indicators = [
-                "similar skills", "related skills", "nearby locations", "similar locations",
-                "expand", "find similar", "related to", "like"
+                # Skill expansion
+                "similar skills", "related skills", "skills similar to", "skills like",
+                "expand skills", "find skills", "skill suggestions",
+                
+                # Title expansion  
+                "similar titles", "related titles", "titles similar to", "titles like",
+                "similar roles", "related roles", "roles similar to", "roles like",
+                "similar positions", "related positions", "positions similar to", "positions like",
+                "expand titles", "find titles", "title suggestions",
+                
+                # Location expansion
+                "nearby locations", "similar locations", "locations similar to", "locations like",
+                "nearby cities", "similar cities", "cities similar to", "cities like",
+                "expand locations", "find locations", "around", "close to", "near"
             ]
+            
             if any(indicator in input_lower for indicator in expansion_indicators):
                 if session_id:
-                    step_logger.log_step("🎯 Routing to ExpansionAgent", "routing")
+                    step_logger.log_step("🎯 Routing to ExpansionAgent (Fallback)", "routing")
                 return await self._route_to_agent("expansion", content, session_id)
         
         # Route to GeneralQueryAgent if available  
@@ -290,13 +330,13 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             general_indicators = ["hi", "hello", "help", "what can you", "explain", "how do"]
             if any(indicator in input_lower for indicator in general_indicators):
                 if session_id:
-                    step_logger.log_step("🎯 Routing to GeneralQueryAgent", "routing")
+                    step_logger.log_step("🎯 Routing to GeneralQueryAgent (Fallback)", "routing")
                 return await self._route_to_agent("general_query", content, session_id)
         
         # Default to SearchInteractionAgent
         if "search_interaction" in self.sub_agents:
             if session_id:
-                step_logger.log_step("🎯 Routing to SearchInteractionAgent", "routing")
+                step_logger.log_step("🎯 Routing to SearchInteractionAgent (Default Fallback)", "routing")
             return await self._route_to_agent("search_interaction", content, session_id)
         
         # If no agents available, use original logic
@@ -320,6 +360,9 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
     3. **Location Expansion**: If user mentions "nearby to X" or "similar locations" → target_agent: "expansion"
     4. **Filter Operations**: Experience/salary modifications → target_agent: "search_interaction"
     5. **Search Execution**: Final search trigger → target_agent: "search_interaction"
+    6. **Expansion**: If the user mentions "similar skills/titles/locations to X and Y and .... then this is a single intent query
+    7. **Expansion**: If the user mentions "similar skills to X and similar titles to Y" then this is a multi intent query
+    8. **Expansion**: If the user mentions "similar skills to X, similar skills to Y" then this is a multi intent query
 
     Break down the query into individual intents:
 

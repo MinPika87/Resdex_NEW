@@ -272,7 +272,7 @@ class ExpansionAgent(BaseResDexAgent):
     async def _handle_matrix_title_expansion(self, user_input: str, session_state: Dict[str, Any],
                                        memory_context: List[Dict[str, Any]], session_id: str, 
                                        user_id: str) -> Content:
-        """Handle title expansion with Matrix Features - COLLECTIVE expansion approach."""
+        """Handle title expansion - FIXED to add expanded titles as skills."""
         try:
             print(f"💼 MATRIX TITLE EXPANSION: Analyzing '{user_input}'")
             
@@ -288,13 +288,12 @@ class ExpansionAgent(BaseResDexAgent):
                     "message": "Please specify titles to expand (e.g., 'find similar titles to data scientist')"
                 })
             
-            # FIXED: Use collective expansion - pass ALL titles at once
             print(f"🔧 Processing {len(base_titles)} titles collectively: {base_titles}")
             
             # Get similar titles
             title_result = await self.tools["matrix_expansion"](
                 expansion_type="title_to_title",
-                base_items=base_titles,  # Pass ALL titles together
+                base_items=base_titles,
                 top_n=5,
                 normalize=True
             )
@@ -302,7 +301,7 @@ class ExpansionAgent(BaseResDexAgent):
             # Get suggested skills for these titles
             skills_result = await self.tools["matrix_expansion"](
                 expansion_type="title_to_skill",
-                base_items=base_titles,  # Pass ALL titles together
+                base_items=base_titles,
                 top_n=5,
                 normalize=True
             )
@@ -310,19 +309,37 @@ class ExpansionAgent(BaseResDexAgent):
             print(f"🔍 Title expansion result: success={title_result.get('success', False)}")
             print(f"🔍 Skills suggestion result: success={skills_result.get('success', False)}")
             
-            if title_result["success"]:
-                print(f"✅ Matrix title expansion successful for collective titles")
+            # Check if we actually got results
+            title_success = title_result.get("success", False) and len(title_result.get("expanded_items", [])) > 0
+            skills_success = skills_result.get("success", False) and len(skills_result.get("expanded_items", [])) > 0
+            
+            if title_success or skills_success:
+                print(f"✅ Matrix title expansion successful (titles: {title_success}, skills: {skills_success})")
                 
-                # Process the collective results
+                # Process the results
                 expanded_titles = [item["name"] for item in title_result.get("expanded_items", [])]
-                suggested_skills = [item["name"] for item in skills_result.get("expanded_items", [])] if skills_result.get("success") else []
+                suggested_skills = [item["name"] for item in skills_result.get("expanded_items", [])]
                 
-                print(f"🎯 Found {len(expanded_titles)} titles similar to ALL input titles: {expanded_titles}")
+                print(f"🎯 Found {len(expanded_titles)} titles similar to input titles: {expanded_titles}")
                 print(f"🎯 Found {len(suggested_skills)} skills relevant to these titles: {suggested_skills}")
                 
-                # Apply suggested skills to session state (limit to top 3)
+                # FIXED: Add expanded titles as skills first (these are the main request)
                 modifications = []
-                for skill_item in skills_result.get("expanded_items", [])[:3]:
+                
+                # PRIMARY: Add the expanded titles as skills (this is what user requested)
+                for title_item in title_result.get("expanded_items", []):
+                    title_name = title_item["name"]
+                    # Add title names as skills using add_skill
+                    if title_name not in session_state.get('keywords', []):
+                        filter_result = await self.tools["filter_tool"](
+                            "add_skill", session_state, skill=title_name, mandatory=False
+                        )
+                        if filter_result["success"]:
+                            modifications.extend(filter_result["modifications"])
+                            print(f"  ✅ Added title as skill: {title_name}")
+                
+                # SECONDARY: Optionally add some suggested skills (limit to top 2)
+                for skill_item in skills_result.get("expanded_items", [])[:2]:
                     skill_name = skill_item["name"]
                     if skill_name not in session_state.get('keywords', []):
                         filter_result = await self.tools["filter_tool"](
@@ -330,10 +347,11 @@ class ExpansionAgent(BaseResDexAgent):
                         )
                         if filter_result["success"]:
                             modifications.extend(filter_result["modifications"])
+                            print(f"  ✅ Added suggested skill: {skill_name}")
                 
                 # Create UI-friendly data
                 ui_expanded_titles = []
-                for item in title_result["expanded_items"]:
+                for item in title_result.get("expanded_items", []):
                     ui_expanded_titles.append({
                         "name": item["name"],
                         "score": item["score"],
@@ -342,7 +360,7 @@ class ExpansionAgent(BaseResDexAgent):
                     })
                 
                 ui_suggested_skills = []
-                for item in skills_result.get("expanded_items", [])[:5]:
+                for item in skills_result.get("expanded_items", [])[:2]:
                     ui_suggested_skills.append({
                         "name": item["name"],
                         "score": item["score"],
@@ -351,12 +369,19 @@ class ExpansionAgent(BaseResDexAgent):
                     })
                 
                 base_titles_str = ", ".join(base_titles)
-                expanded_titles_str = ", ".join(expanded_titles)
                 
-                if len(base_titles) > 1:
-                    message = f"Matrix analysis found {len(expanded_titles)} titles similar to ALL of: {base_titles_str} and added {len(suggested_skills[:3])} relevant skills → {expanded_titles_str}"
+                # FIXED: Better message explaining what was added
+                title_count = len(expanded_titles)
+                skill_count = len(suggested_skills[:2])
+                
+                if title_count > 0 and skill_count > 0:
+                    message = f"Added {title_count} similar titles ({', '.join(expanded_titles)}) and {skill_count} relevant skills for '{base_titles_str}'"
+                elif title_count > 0:
+                    message = f"Added {title_count} similar titles ({', '.join(expanded_titles)}) for '{base_titles_str}'"
+                elif skill_count > 0:
+                    message = f"Added {skill_count} relevant skills for '{base_titles_str}'"
                 else:
-                    message = f"Matrix analysis expanded '{base_titles_str}' to {len(expanded_titles)} related titles and added {len(suggested_skills[:3])} relevant skills: {expanded_titles_str}"
+                    message = f"Matrix analysis processed '{base_titles_str}' but found limited results"
                 
                 return self.create_content({
                     "success": True,
@@ -364,7 +389,7 @@ class ExpansionAgent(BaseResDexAgent):
                     "method": "matrix_features",
                     "base_titles": base_titles,
                     "expanded_titles": expanded_titles,
-                    "suggested_skills": suggested_skills[:3],
+                    "suggested_skills": suggested_skills[:2],
                     "ui_expanded_titles": ui_expanded_titles,
                     "ui_suggested_skills": ui_suggested_skills,
                     "modifications": modifications,
@@ -372,15 +397,15 @@ class ExpansionAgent(BaseResDexAgent):
                     "message": message,
                     "trigger_search": False,
                     "matrix_stats": {
-                        "titles_found": title_result.get("total_found", len(expanded_titles)),
-                        "skills_found": skills_result.get("total_found", 0),
-                        "confidence": "high",
+                        "titles_found": len(expanded_titles),
+                        "skills_found": len(suggested_skills),
+                        "confidence": "high" if (title_success and skills_success) else "medium",
                         "collective_expansion": True,
                         "base_titles_count": len(base_titles)
                     }
                 })
             else:
-                print(f"⚠️ Matrix title expansion failed: {title_result.get('error', 'Unknown error')}")
+                print(f"⚠️ Matrix title expansion failed or returned no results")
                 print(f"🔄 Falling back to LLM expansion...")
                 
                 # Fallback to LLM for all titles collectively
