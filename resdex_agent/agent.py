@@ -245,9 +245,8 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         
         # If no agents available, use original logic
         return await self._execute_original_logic(content, session_id, user_id)
-    
+    """
     async def _try_intelligent_routing(self, content: Content, session_id: str, user_id: str) -> Content:
-        """NEW: Intelligent multi-intent orchestration with proper intent analysis."""
         user_input = content.data.get("user_input", "")
         session_state = content.data.get("session_state", {})
         
@@ -341,9 +340,10 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         
         # If no agents available, use original logic
         return await self._execute_original_logic(content, session_id, user_id)
+    """
 
     async def _analyze_multi_intent_breakdown(self, user_input: str, session_state: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze if query has multiple intents and break them down - ENHANCED for expansions."""
+        """Analyze if query has multiple intents and break them down - ENHANCED with intelligent extraction."""
         
         prompt = f"""You are an intent analyzer. Break down this user query into distinct, actionable intents for a recruitment system with expansion capabilities.
 
@@ -364,6 +364,29 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
     7. **Expansion**: If the user mentions "similar skills to X and similar titles to Y" then this is a multi intent query
     8. **Expansion**: If the user mentions "similar skills to X, similar skills to Y" then this is a multi intent query
 
+    INTELLIGENT QUERY FORMATTING:
+    When creating extracted_query for expansion agent, ALWAYS format it properly:
+    - For skills: "similar skills to [SKILL_NAME]" (e.g., "similar skills to Python")
+    - For titles: "similar titles to [TITLE_NAME]" (e.g., "similar titles to Data Scientist")  
+    - For locations: "nearby locations to [LOCATION_NAME]" (e.g., "nearby locations to Mumbai")
+
+    EXAMPLES OF INTELLIGENT FORMATTING:
+    Input: "skills like Python and React"
+    → Extract: ["Python", "React"]
+    → Format: "similar skills to Python and React"
+
+    Input: "titles for data scientist"  
+    → Extract: ["Data Scientist"]
+    → Format: "similar titles to Data Scientist"
+
+    Input: "nearby Mumbai"
+    → Extract: ["Mumbai"] 
+    → Format: "nearby locations to Mumbai"
+
+    Input: "expand frontend skills"
+    → Extract: ["frontend"]
+    → Format: "similar skills to frontend"
+
     Break down the query into individual intents:
 
     {{
@@ -373,8 +396,9 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             {{
                 "intent_id": 1,
                 "intent_type": "skill_expansion|title_expansion|location_expansion|filter_operation|search_execution",
-                "target_agent": "expansion|search_interaction",  // USE RULES ABOVE
-                "extracted_query": "specific query for this intent",
+                "target_agent": "expansion|search_interaction",
+                "extracted_query": "PROPERLY FORMATTED QUERY FOR TARGET AGENT",
+                "raw_entities": ["extracted", "entities", "from", "input"],
                 "execution_order": 1,
                 "description": "human readable description"
             }}
@@ -385,11 +409,83 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
     }}
 
     EXAMPLES:
-    - "similar skills to Python" → {{"target_agent": "expansion", "intent_type": "skill_expansion"}}
-    - "similar titles to data scientist" → {{"target_agent": "expansion", "intent_type": "title_expansion"}}
-    - "nearby to Mumbai" → {{"target_agent": "expansion", "intent_type": "location_expansion"}}
-    - "10+ years experience" → {{"target_agent": "search_interaction", "intent_type": "filter_operation"}}
-    - "execute search" → {{"target_agent": "search_interaction", "intent_type": "search_execution"}}
+
+    Input: "skills like Python and titles like Data Scientist"
+    Output: {{
+        "is_multi_intent": true,
+        "total_intents": 2,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "skill_expansion",
+                "target_agent": "expansion",
+                "extracted_query": "similar skills to Python",
+                "raw_entities": ["Python"],
+                "execution_order": 1,
+                "description": "Find skills similar to Python"
+            }},
+            {{
+                "intent_id": 2,
+                "intent_type": "title_expansion", 
+                "target_agent": "expansion",
+                "extracted_query": "similar titles to Data Scientist",
+                "raw_entities": ["Data Scientist"],
+                "execution_order": 2,
+                "description": "Find titles similar to Data Scientist"
+            }}
+        ]
+    }}
+
+    Input: "similar titles for data scientist"
+    Output: {{
+        "is_multi_intent": false,
+        "total_intents": 1,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "title_expansion",
+                "target_agent": "expansion", 
+                "extracted_query": "similar titles to Data Scientist",
+                "raw_entities": ["Data Scientist"],
+                "execution_order": 1,
+                "description": "Find titles similar to Data Scientist"
+            }}
+        ]
+    }}
+
+    Input: "expand Python skills"
+    Output: {{
+        "is_multi_intent": false,
+        "total_intents": 1,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "skill_expansion",
+                "target_agent": "expansion",
+                "extracted_query": "similar skills to Python", 
+                "raw_entities": ["Python"],
+                "execution_order": 1,
+                "description": "Find skills similar to Python"
+            }}
+        ]
+    }}
+
+    Input: "nearby Mumbai locations"
+    Output: {{
+        "is_multi_intent": false,
+        "total_intents": 1,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "location_expansion",
+                "target_agent": "expansion",
+                "extracted_query": "nearby locations to Mumbai",
+                "raw_entities": ["Mumbai"],
+                "execution_order": 1,
+                "description": "Find locations near Mumbai"
+            }}
+        ]
+    }}
 
     Return ONLY the JSON response."""
 
@@ -404,7 +500,22 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             if llm_result["success"]:
                 if "parsed_response" in llm_result and llm_result["parsed_response"]:
                     breakdown = llm_result["parsed_response"]
-                    print(f"🧠 MULTI-INTENT BREAKDOWN (parsed): {breakdown}")
+                    
+                    # ENHANCED: Validate and improve extracted queries
+                    if "intents" in breakdown:
+                        for intent in breakdown["intents"]:
+                            # Ensure the extracted_query is properly formatted
+                            if intent.get("target_agent") == "expansion":
+                                original_query = intent.get("extracted_query", "")
+                                improved_query = self._ensure_proper_expansion_format(
+                                    original_query, 
+                                    intent.get("intent_type", ""),
+                                    intent.get("raw_entities", [])
+                                )
+                                intent["extracted_query"] = improved_query
+                                print(f"🔧 Improved query: '{original_query}' → '{improved_query}'")
+                    
+                    print(f"🧠 ENHANCED MULTI-INTENT BREAKDOWN: {breakdown}")
                     return {"success": True, **breakdown}
                 elif "response_text" in llm_result:
                     try:
@@ -417,7 +528,21 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
                             json_text = response_text[json_start:json_end]
                             
                             breakdown = json.loads(json_text)
-                            print(f"🧠 MULTI-INTENT BREAKDOWN (manual): {breakdown}")
+                            
+                            # Apply the same enhancement
+                            if "intents" in breakdown:
+                                for intent in breakdown["intents"]:
+                                    if intent.get("target_agent") == "expansion":
+                                        original_query = intent.get("extracted_query", "")
+                                        improved_query = self._ensure_proper_expansion_format(
+                                            original_query, 
+                                            intent.get("intent_type", ""),
+                                            intent.get("raw_entities", [])
+                                        )
+                                        intent["extracted_query"] = improved_query
+                                        print(f"🔧 Improved query: '{original_query}' → '{improved_query}'")
+                            
+                            print(f"🧠 ENHANCED MULTI-INTENT BREAKDOWN (manual): {breakdown}")
                             return {"success": True, **breakdown}
                     except json.JSONDecodeError as e:
                         print(f"❌ JSON parsing failed: {e}")
@@ -429,6 +554,50 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             logger.error(f"Multi-intent breakdown failed: {e}")
             print(f"❌ Multi-intent breakdown exception: {e}")
             return {"success": False, "is_multi_intent": False}
+
+    def _ensure_proper_expansion_format(self, extracted_query: str, intent_type: str, raw_entities: List[str]) -> str:
+        """
+        Ensure the extracted query is in the proper format that expansion agent patterns can handle.
+        """
+        if not extracted_query or not intent_type:
+            return extracted_query
+        
+        # If it's already in the right format, keep it
+        proper_patterns = {
+            "skill_expansion": ["similar skills to", "skills similar to", "expand", "skills like"],
+            "title_expansion": ["similar titles to", "titles similar to", "expand", "titles like", "roles similar to"],
+            "location_expansion": ["nearby locations to", "locations near", "similar locations to"]
+        }
+        
+        current_patterns = proper_patterns.get(intent_type, [])
+        if any(pattern in extracted_query.lower() for pattern in current_patterns):
+            return extracted_query
+        
+        # Format according to intent type
+        if intent_type == "skill_expansion":
+            if raw_entities:
+                entities_str = " and ".join(raw_entities)
+                return f"similar skills to {entities_str}"
+            else:
+                # Try to extract from the query itself
+                return extracted_query
+        
+        elif intent_type == "title_expansion":
+            if raw_entities:
+                entities_str = " and ".join(raw_entities)
+                return f"similar titles to {entities_str}"
+            else:
+                return extracted_query
+        
+        elif intent_type == "location_expansion":
+            if raw_entities:
+                entities_str = " and ".join(raw_entities)
+                return f"nearby locations to {entities_str}"
+            else:
+                return extracted_query
+        
+        # Default: return as-is
+        return extracted_query
     
     async def _execute_multi_intent_orchestration(self, intent_breakdown: Dict[str, Any], 
                                                 user_input: str, session_state: Dict[str, Any],

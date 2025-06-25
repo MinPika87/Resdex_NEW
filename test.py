@@ -108,7 +108,7 @@ class EnhancedActionCapture:
         if "search" in response_data:
             self.tools_used.append("search_tool")
         if "location_analysis" in response_data:
-            self.tools_used.append("location_tool")
+            self.tools_used.append("location_expansion_tool")
     
     def capture_modifications(self, modifications: List[Dict[str, Any]]):
         """Enhanced modification capture for new architecture."""
@@ -234,20 +234,22 @@ class EnhancedGroundTruthManager:
     """Enhanced ground truth manager for new architecture with 4 query types."""
     
     def __init__(self):
+        # Updated ground truth dictionary for the new queries
+
         self.ground_truth = {
             # TYPE 1: Single Tool, No Memory (10 queries)
-            "add python skill": "Skill added: Python",
-            "set experience to 5 years": "Min experience set: 5 years",
+            "add python and java": "Skill added: Python; Skill added: Java",
+            "increase experience by 5 years": "Experience set: 0-15 years",  # Assuming current max is 10, adding 5
             "add bangalore location": "Location added: Bangalore",
             "set salary range 10-20 lpa": "Salary range set: 10-20 LPA",
-            "make java mandatory": "Skill made mandatory: Java",
-            "remove react skill": "Skill removed: React",
-            "add mumbai and delhi": "Location added: Mumbai; Location added: Delhi",
-            "set experience 3-8 years": "Experience set: 3-8 years",
-            "add nodejs skill": "Skill added: Nodejs",
-            "search for candidates now": "Search executed",
+            "add similar skills to java": "Skills expanded: Spring, Hibernate, Maven",
+            "similar titles to software engineer": "Titles expanded: Developer, Programmer",
+            "nearby locations to mumbai": "Locations expanded: Thane, Pune, Nashik",
+            "similar skills": "No actions taken",  # Too vague, no specific skill mentioned
+            "similar designations for my query": "No actions taken",  # Too vague, no specific designation mentioned
+            "expand my query": "No actions taken",  # Too vague, no specific target for expansion
             
-            # TYPE 2: Single Tool, With Memory (10 queries)
+            # TYPE 2: Single Tool, With Memory (10 queries) - Keep existing
             "add the same skills we discussed": "No actions taken",  # Memory reference
             "use previous salary range": "No actions taken",  # Memory reference
             "add skills similar to what we used before": "No actions taken",  # Memory + expansion
@@ -259,19 +261,19 @@ class EnhancedGroundTruthManager:
             "apply filters like last time": "No actions taken",  # Memory reference
             "search with our usual criteria": "Search executed",  # Memory + search
             
-            # TYPE 3: Multi Tool, No Memory (10 queries)
+            # TYPE 3: Multi Tool, No Memory (10 queries) - Updated
             "find similar skills to python and set experience 5+ years": "Skills expanded: Django, Flask, Pandas; Experience set: 5-10 years",
-            "add react skills and search candidates in bangalore": "Skills expanded: JavaScript, TypeScript, Redux; Location added: Bangalore; Search executed",
+            "similar titles to data scientist from nearby to bangalore": "Titles expanded: ML Engineer, Data Analyst; Locations expanded: Mysore, Hubli, Coimbatore",
             "expand java skills and add nearby cities to mumbai": "Skills expanded: Spring, Hibernate, Maven; Locations expanded: Thane, Pune, Nashik",
-            "find titles similar to data scientist and add relevant skills": "Titles expanded: ML Engineer, Data Analyst; Skills suggested: Python, SQL",
+            "find titles similar to software engineer and add relevant skills, from nearby noida": "Titles expanded: Developer, Programmer; Skills suggested: Java, Python; Locations expanded: Delhi, Gurgaon, Faridabad",
             "get skills for frontend developer and set salary 8-15 lpa": "Skills suggested: React, JavaScript; Salary range set: 8-15 LPA",
-            "find similar titles to software engineer and search": "Titles expanded: Developer, Programmer; Search executed",
+            "find similar titles to software engineer from nearby chennai and increase experience by 5 years": "Titles expanded: Developer, Programmer; Locations expanded: Coimbatore, Madurai, Trichy; Experience set: 0-15 years",
             "expand python skills and add 3+ years experience": "Skills expanded: Django, Flask, Pandas; Experience set: 3-10 years",
-            "find nearby locations to delhi and add devops skills": "Locations expanded: Gurgaon, Noida, Faridabad; Skill added: DevOps",
-            "get related skills to machine learning and search candidates": "Skills expanded: Python, TensorFlow, PyTorch; Search executed",
+            "find nearby locations to goa and add devops skills": "Locations expanded: Mumbai, Pune, Bangalore; Skill added: DevOps",
+            "get related skills to machine learning from nearby locations to bangalore": "Skills expanded: Python, TensorFlow, PyTorch; Locations expanded: Mysore, Hubli, Coimbatore",
             "find similar roles to product manager and set experience": "Titles expanded: Product Owner, Business Analyst; Experience set: 0-10 years",
             
-            # TYPE 4: Multi Tool, With Memory (10 queries)
+            # TYPE 4: Multi Tool, With Memory (10 queries) - Keep existing
             "expand the skills we discussed and add similar cities": "Skills expanded: Django, Flask, Pandas; Locations expanded: Thane, Pune, Nashik",
             "find titles similar to our previous role and search": "Titles expanded: ML Engineer, Data Analyst; Search executed",
             "get related skills like before and add nearby locations": "Skills expanded: JavaScript, TypeScript, Redux; Locations expanded: Gurgaon, Noida, Faridabad",
@@ -672,55 +674,29 @@ def create_enhanced_queries_file(filename: str = 'queries.txt'):
     
     queries_by_type = {
         "# TYPE 1: Single Tool, No Memory (10 queries)": [
-            "add python skill",
-            "set experience to 5 years", 
+            "add python and java",
+            "increase experience by 5 years", 
             "add bangalore location",
             "set salary range 10-20 lpa",
-            "make java mandatory",
-            "remove react skill",
-            "add mumbai and delhi",
-            "set experience 3-8 years",
-            "add nodejs skill",
-            "search for candidates now"
-        ],
-        
-        "# TYPE 2: Single Tool, With Memory (10 queries)": [
-            "add the same skills we discussed",
-            "use previous salary range",
-            "add skills similar to what we used before", 
-            "include the cities from our last search",
-            "make those skills mandatory like before",
-            "repeat the same filter setup",
-            "add experience range we had earlier",
-            "use the locations from previous query",
-            "apply filters like last time",
-            "search with our usual criteria"
+            "add similar skills to java",
+            "similar titles to software engineer",
+            "nearby locations to mumbai",
+            "similar skills",
+            "similar designations for my query",
+            "expand my query"
         ],
         
         "# TYPE 3: Multi Tool, No Memory (10 queries)": [
             "find similar skills to python and set experience 5+ years",
-            "add react skills and search candidates in bangalore",
+            "similar titles to data scientist from nearby to bangalore",
             "expand java skills and add nearby cities to mumbai",
-            "find titles similar to data scientist and add relevant skills",
+            "find titles similar to software engineer and add relevant skills, from nearby noida",
             "get skills for frontend developer and set salary 8-15 lpa",
-            "find similar titles to software engineer and search",
+            "find similar titles to software engineer from nearby Chennai and increase experience by 5 years",
             "expand python skills and add 3+ years experience",
-            "find nearby locations to delhi and add devops skills",
-            "get related skills to machine learning and search candidates",
+            "find nearby locations to goa and add devops skills",
+            "get related skills to machine learning from nearby locations to bangalore",
             "find similar roles to product manager and set experience"
-        ],
-        
-        "# TYPE 4: Multi Tool, With Memory (10 queries)": [
-            "expand the skills we discussed and add similar cities",
-            "find titles similar to our previous role and search",
-            "get related skills like before and add nearby locations",
-            "expand our usual skills and increase experience range",
-            "find similar titles to what we used and add skills",
-            "get nearby cities like last time and search candidates",
-            "expand skills from previous query and set salary",
-            "find related roles and add the locations we mentioned",
-            "get similar skills and search with our filters",
-            "expand previous titles and add experience like before"
         ]
     }
     

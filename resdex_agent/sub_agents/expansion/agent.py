@@ -53,9 +53,9 @@ class ExpansionAgent(BaseResDexAgent):
             from ...tools.matrix_expansion_tool import MatrixExpansionTool
             self.tools["matrix_expansion"] = MatrixExpansionTool("matrix_expansion_tool")
             
-            # Location expansion tool (unchanged)
-            from ...tools.location_tools import LocationAnalysisTool
-            self.tools["location_tool"] = LocationAnalysisTool("location_expansion_tool")
+            # NEW: Matrix-based location expansion tool
+            from ...tools.location_expansion_tool import MatrixLocationExpansionTool
+            self.tools["matrix_location"] = MatrixLocationExpansionTool("matrix_location_expansion_tool")
             
             # Filter tool for applying expanded results
             from ...tools.filter_tools import FilterTool
@@ -69,10 +69,19 @@ class ExpansionAgent(BaseResDexAgent):
                 print("✅ Matrix Features system available - using as primary expansion method")
             else:
                 print("⚠️ Matrix Features not available - will use LLM fallback only")
+                
+            # Check matrix location availability
+            location_stats = self.tools["matrix_location"].get_matrix_stats()
+            if location_stats.get("available", False):
+                print("✅ Matrix Location system available - using as primary location method")
+            else:
+                print("⚠️ Matrix Location system not available - will use LLM fallback only")
             
         except Exception as e:
             logger.error(f"Failed to setup enhanced expansion tools: {e}")
             print(f"❌ Enhanced expansion tools setup failed: {e}")
+            import traceback
+            traceback.print_exc()
     
     async def execute_core(self, content: Content, memory_context: List[Dict[str, Any]], 
                           session_id: str, user_id: str) -> Content:
@@ -948,83 +957,105 @@ class ExpansionAgent(BaseResDexAgent):
                 "error": f"Hardcoded title fallback failed: {str(e)}"
             })
     
-    # Keep existing location expansion methods unchanged
     async def _handle_location_expansion(self, user_input: str, session_state: Dict[str, Any],
-                                       memory_context: List[Dict[str, Any]], session_id: str, 
-                                       user_id: str) -> Content:
-        """Handle location expansion using existing location tools (unchanged)."""
-        # ... existing location expansion code remains the same ...
+                                   memory_context: List[Dict[str, Any]], session_id: str, 
+                                   user_id: str) -> Content:
+        """Handle location expansion with Matrix Features - following same pattern as skills/titles."""
         try:
-            print(f"🗺️ LOCATION EXPANSION: Analyzing '{user_input}'")
+            print(f"🗺️ MATRIX LOCATION EXPANSION: Analyzing '{user_input}'")
             
+            # Extract base locations using existing method
             location_info = self._extract_location_info(user_input, session_state)
+            base_location = location_info["base_location"]
             
-            if not location_info["base_location"]:
+            if not base_location:
                 return self.create_content({
                     "success": False,
                     "error": "No base location found for expansion",
                     "message": "Please specify a location to expand (e.g., 'find nearby locations to Mumbai')"
                 })
             
-            location_result = await self.tools["location_tool"](
-                base_location=location_info["base_location"],
-                analysis_type=location_info["analysis_type"],
-                criteria="job market and tech industry"
+            print(f"📝 Base location identified: {base_location}")
+            
+            # Try matrix expansion first
+            matrix_result = await self.tools["matrix_location"](
+                base_location=base_location,
+                radius_km=50.0,  # Default radius
+                max_results=5
             )
             
-            if not location_result["success"]:
+            print(f"🔍 Matrix location result: success={matrix_result.get('success', False)}")
+            
+            if matrix_result["success"]:
+                print(f"✅ Matrix location expansion successful")
+                
+                # Process matrix results
+                expanded_locations = matrix_result.get("expanded_locations", [])
+                detailed_locations = matrix_result.get("detailed_locations", [])
+                
+                print(f"🎯 Found {len(expanded_locations)} locations near {base_location}: {expanded_locations}")
+                
+                # Apply expanded locations to session state
+                modifications = []
+                for location in expanded_locations:
+                    if location not in session_state.get('current_cities', []):
+                        filter_result = await self.tools["filter_tool"](
+                            "add_location", session_state, location=location, mandatory=False
+                        )
+                        if filter_result["success"]:
+                            modifications.extend(filter_result["modifications"])
+                
+                # Create UI-friendly expanded locations data
+                ui_expanded_locations = []
+                for detail in detailed_locations:
+                    ui_expanded_locations.append({
+                        "name": detail["name"],
+                        "distance_km": detail["distance_km"],
+                        "coordinates": detail.get("coordinates", []),
+                        "confidence": "high",  # Matrix-based = high confidence
+                        "method": "matrix_coordinates"
+                    })
+                
+                expanded_locations_str = ", ".join(expanded_locations)
+                message = f"Matrix analysis found {len(expanded_locations)} locations near '{base_location}': {expanded_locations_str}"
+                
+                return self.create_content({
+                    "success": True,
+                    "expansion_type": "location_expansion",
+                    "method": "matrix_coordinates",
+                    "base_location": base_location,
+                    "expanded_locations": expanded_locations,
+                    "ui_expanded_locations": ui_expanded_locations,
+                    "modifications": modifications,
+                    "session_state": session_state,
+                    "message": message,
+                    "trigger_search": False,
+                    "matrix_stats": {
+                        "total_found": matrix_result.get("total_found", len(expanded_locations)),
+                        "search_radius_km": 50.0,
+                        "confidence": "high"
+                    }
+                })
+            else:
+                print(f"⚠️ Matrix location expansion failed: {matrix_result.get('error', 'Unknown error')}")
+                print(f"🔄 Falling back to LLM expansion...")
+                
+                # Fallback to LLM expansion
+                return await self._handle_llm_location_expansion_fallback(base_location, session_state, memory_context)
+                    
+        except Exception as e:
+            print(f"❌ Matrix location expansion error: {e}")
+            import traceback
+            traceback.print_exc()
+            # Use LLM fallback
+            base_location = base_location if 'base_location' in locals() else ""
+            if base_location:
+                return await self._handle_llm_location_expansion_fallback(base_location, session_state, memory_context)
+            else:
                 return self.create_content({
                     "success": False,
-                    "error": "Location expansion failed",
-                    "details": location_result.get("error", "Unknown error")
+                    "error": f"Location expansion failed: {str(e)}"
                 })
-            
-            # Extract discovered locations
-            discovered_locations = []
-            if location_info["analysis_type"] == "nearby":
-                if "nearby_locations" in location_result:
-                    nearby_data = location_result["nearby_locations"]
-                    if isinstance(nearby_data, list) and len(nearby_data) > 0:
-                        if isinstance(nearby_data[0], dict) and "city" in nearby_data[0]:
-                            discovered_locations = [loc["city"] for loc in nearby_data]
-                        else:
-                            discovered_locations = nearby_data
-            else:
-                discovered_locations = location_result.get("similar_locations", [])
-            
-            # Apply expanded locations to session state
-            modifications = []
-            all_locations = [location_info["base_location"]] + discovered_locations[:self.config.max_locations_expansion]
-            
-            for location in all_locations:
-                if location not in session_state.get('current_cities', []):
-                    filter_result = await self.tools["filter_tool"](
-                        "add_location", session_state, location=location, mandatory=False
-                    )
-                    if filter_result["success"]:
-                        modifications.extend(filter_result["modifications"])
-            
-            message = f"Expanded '{location_info['base_location']}' to {len(all_locations)} locations: {', '.join(all_locations)}"
-            
-            return self.create_content({
-                "success": True,
-                "expansion_type": "location_expansion",
-                "base_location": location_info["base_location"],
-                "analysis_type": location_info["analysis_type"],
-                "expanded_locations": all_locations,
-                "modifications": modifications,
-                "session_state": session_state,
-                "message": message,
-                "trigger_search": False,
-                "location_analysis": location_result
-            })
-            
-        except Exception as e:
-            logger.error(f"Location expansion failed: {e}")
-            return self.create_content({
-                "success": False,
-                "error": f"Location expansion failed: {str(e)}"
-            })
     
     async def _handle_multi_expansion(self, user_input: str, session_state: Dict[str, Any],
                                 memory_context: List[Dict[str, Any]], session_id: str, 
@@ -1081,7 +1112,172 @@ class ExpansionAgent(BaseResDexAgent):
                 "success": False,
                 "error": f"Enhanced multi-expansion failed: {str(e)}"
             })
-    
+    async def _handle_llm_location_expansion_fallback(self, base_location: str, session_state: Dict[str, Any],
+                                                memory_context: List[Dict[str, Any]]) -> Content:
+        """Fallback to LLM-based location expansion when matrix fails."""
+        try:
+            print(f"🔄 LLM LOCATION EXPANSION FALLBACK for: {base_location}")
+            
+            # Use the original LLM expansion method
+            expansion_result = await self._expand_locations_with_llm(base_location, memory_context)
+            
+            if expansion_result["success"]:
+                expanded_locations = expansion_result["expanded_locations"]
+                
+                # Apply expanded locations to session state
+                modifications = []
+                for location in expanded_locations:
+                    if location not in session_state.get('current_cities', []):
+                        filter_result = await self.tools["filter_tool"](
+                            "add_location", session_state, location=location, mandatory=False
+                        )
+                        if filter_result["success"]:
+                            modifications.extend(filter_result["modifications"])
+                
+                # Create UI-friendly data
+                ui_expanded_locations = []
+                for location in expanded_locations:
+                    ui_expanded_locations.append({
+                        "name": location,
+                        "distance_km": None,  # LLM doesn't provide distance
+                        "confidence": "medium",
+                        "method": "llm_analysis"
+                    })
+                
+                message = f"LLM analysis expanded '{base_location}' to {len(expanded_locations)} related locations: {', '.join(expanded_locations)}"
+                
+                return self.create_content({
+                    "success": True,
+                    "expansion_type": "location_expansion",
+                    "method": "llm_fallback",
+                    "base_location": base_location,
+                    "expanded_locations": expanded_locations,
+                    "ui_expanded_locations": ui_expanded_locations,
+                    "modifications": modifications,
+                    "session_state": session_state,
+                    "message": message,
+                    "trigger_search": False,
+                    "fallback_used": True
+                })
+            
+            # If LLM also fails, use hardcoded fallback
+            return await self._use_hardcoded_location_fallback(base_location, session_state)
+            
+        except Exception as e:
+            logger.error(f"LLM location expansion fallback failed: {e}")
+            return await self._use_hardcoded_location_fallback(base_location, session_state)
+
+    async def _expand_locations_with_llm(self, base_location: str, memory_context: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Use LLM to expand locations (existing method for fallback)."""
+        prompt = f"""You are a location expansion expert for India. Find 4-5 locations similar or nearby to "{base_location}" for tech recruitment.
+
+    Base Location: {base_location}
+
+    CRITICAL: Return ONLY valid JSON in this EXACT format:
+    {{
+        "base_location": "{base_location}",
+        "expanded_locations": ["location1", "location2", "location3", "location4"],
+        "reasoning": "brief explanation"
+    }}"""
+
+        try:
+            llm_result = await self.tools["llm_tool"]._call_llm_direct(
+                prompt=prompt,
+                task="location_expansion"
+            )
+            
+            if llm_result["success"] and "parsed_response" in llm_result and llm_result["parsed_response"]:
+                parsed = llm_result["parsed_response"]
+                return {
+                    "success": True,
+                    "expanded_locations": parsed.get("expanded_locations", [])
+                }
+            else:
+                return self._fallback_location_expansion(base_location)
+                
+        except Exception as e:
+            logger.error(f"LLM location expansion failed: {e}")
+            return self._fallback_location_expansion(base_location)
+
+    async def _use_hardcoded_location_fallback(self, base_location: str, session_state: Dict[str, Any]) -> Content:
+        """Final fallback using hardcoded location mappings."""
+        try:
+            print(f"🔧 HARDCODED LOCATION FALLBACK for: {base_location}")
+            
+            fallback_result = self._fallback_location_expansion(base_location)
+            
+            if fallback_result["success"]:
+                expanded_locations = fallback_result["expanded_locations"]
+                
+                # Apply expanded locations to session state
+                modifications = []
+                for location in expanded_locations:
+                    if location not in session_state.get('current_cities', []):
+                        filter_result = await self.tools["filter_tool"](
+                            "add_location", session_state, location=location, mandatory=False
+                        )
+                        if filter_result["success"]:
+                            modifications.extend(filter_result["modifications"])
+                
+                # Create UI-friendly data
+                ui_expanded_locations = []
+                for location in expanded_locations:
+                    ui_expanded_locations.append({
+                        "name": location,
+                        "distance_km": None,
+                        "confidence": "low",
+                        "method": "hardcoded_mapping"
+                    })
+                
+                message = f"Hardcoded mapping expanded '{base_location}' to {len(expanded_locations)} related locations: {', '.join(expanded_locations)}"
+                
+                return self.create_content({
+                    "success": True,
+                    "expansion_type": "location_expansion",
+                    "method": "hardcoded_fallback",
+                    "base_location": base_location,
+                    "expanded_locations": expanded_locations,
+                    "ui_expanded_locations": ui_expanded_locations,
+                    "modifications": modifications,
+                    "session_state": session_state,
+                    "message": message,
+                    "trigger_search": False,
+                    "fallback_used": True
+                })
+            
+            return self.create_content({
+                "success": False,
+                "error": "All location expansion methods failed",
+                "message": "Unable to expand locations using any available method"
+            })
+            
+        except Exception as e:
+            logger.error(f"Hardcoded location fallback failed: {e}")
+            return self.create_content({
+                "success": False,
+                "error": f"Hardcoded location fallback failed: {str(e)}"
+            })
+
+    def _fallback_location_expansion(self, base_location: str) -> Dict[str, Any]:
+        """Fallback location expansion with hardcoded mappings."""
+        location_mappings = {
+            "mumbai": ["Pune", "Thane", "Navi Mumbai", "Nashik", "Aurangabad"],
+            "bangalore": ["Hyderabad", "Chennai", "Mysore", "Coimbatore", "Hubli"],
+            "delhi": ["Gurgaon", "Noida", "Faridabad", "Ghaziabad", "Chandigarh"],
+            "hyderabad": ["Bangalore", "Chennai", "Vijayawada", "Visakhapatnam", "Warangal"],
+            "chennai": ["Bangalore", "Hyderabad", "Coimbatore", "Madurai", "Trichy"],
+            "pune": ["Mumbai", "Nashik", "Aurangabad", "Kolhapur", "Satara"],
+            "kolkata": ["Siliguri", "Durgapur", "Asansol", "Howrah", "Bhubaneswar"],
+            "ahmedabad": ["Surat", "Vadodara", "Rajkot", "Gandhinagar", "Anand"],
+            "jaipur": ["Indore", "Bhopal", "Udaipur", "Kota", "Ajmer"],
+            "kochi": ["Thiruvananthapuram", "Kozhikode", "Coimbatore", "Mangalore", "Mysore"]
+        }
+        
+        expanded = location_mappings.get(base_location.lower(), [base_location])
+        return {
+            "success": True,
+            "expanded_locations": expanded[:5]  # Limit to 5 locations
+        }
     async def _handle_auto_expansion(self, user_input: str, session_state: Dict[str, Any],
                            memory_context: List[Dict[str, Any]], session_id: str, 
                            user_id: str) -> Content:
