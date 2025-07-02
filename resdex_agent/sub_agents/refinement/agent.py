@@ -126,8 +126,8 @@ class RefinementAgent(BaseResDexAgent):
             return "auto_detection"
     
     async def _handle_facet_generation(self, user_input: str, session_state: Dict[str, Any],
-                                     memory_context: List[Dict[str, Any]], session_id: str, 
-                                     user_id: str) -> Content:
+                                 memory_context: List[Dict[str, Any]], session_id: str, 
+                                 user_id: str) -> Content:
         """Handle facet generation requests."""
         try:
             print(f"🎯 FACET GENERATION: Analyzing '{user_input}'")
@@ -137,7 +137,9 @@ class RefinementAgent(BaseResDexAgent):
                 return self.create_content({
                     "success": False,
                     "error": "Facet generation tool not available",
-                    "message": "Facet generation is currently unavailable. Please try again later."
+                    "message": "Facet generation is currently unavailable. Please try again later.",
+                    "type": "refinement_response",  # FIXED: Add response type
+                    "refinement_type": "facet_generation"
                 })
             
             # Call the facet generation tool
@@ -159,21 +161,27 @@ class RefinementAgent(BaseResDexAgent):
                 
                 return self.create_content({
                     "success": True,
+                    "type": "refinement_response",  # FIXED: Add response type
                     "refinement_type": "facet_generation",
                     "method": "api_integration",
                     "facets_data": facets_data,
                     "message": message,
                     "session_state": session_state,
                     "trigger_search": False,
-                    "user_friendly_display": self._create_user_friendly_facets(facets_data)
+                    "user_friendly_display": self._create_user_friendly_facets(facets_data),
+                    # REMOVED: modifications array to prevent search triggering
+                    "modifications": []  # Empty modifications
                 })
             else:
                 print(f"⚠️ Facet generation failed: {facet_result.get('error', 'Unknown error')}")
                 
                 return self.create_content({
                     "success": False,
+                    "type": "refinement_response",  # FIXED: Add response type
+                    "refinement_type": "facet_generation",
                     "error": facet_result.get("error", "Facet generation failed"),
-                    "message": "I couldn't generate facets for your current search. This might be due to insufficient data or API issues. Please try with different search criteria."
+                    "message": "I couldn't generate facets for your current search. This might be due to insufficient data or API issues. Please try with different search criteria.",
+                    "modifications": []  # Empty modifications
                 })
                     
         except Exception as e:
@@ -182,37 +190,43 @@ class RefinementAgent(BaseResDexAgent):
             traceback.print_exc()
             return self.create_content({
                 "success": False,
-                "error": f"Facet generation failed: {str(e)}"
+                "type": "refinement_response",  # FIXED: Add response type
+                "refinement_type": "facet_generation",
+                "error": f"Facet generation failed: {str(e)}",
+                "modifications": []  # Empty modifications
             })
-    
+
     async def _handle_query_relaxation(self, user_input: str, session_state: Dict[str, Any],
-                                     memory_context: List[Dict[str, Any]], session_id: str, 
-                                     user_id: str) -> Content:
-        """Handle query relaxation requests (placeholder for future implementation)."""
+                                    memory_context: List[Dict[str, Any]], session_id: str, 
+                                    user_id: str) -> Content:
+        """Handle query relaxation requests."""
         try:
             print(f"🔄 QUERY RELAXATION: Analyzing '{user_input}'")
-            
-            # For now, provide a placeholder response
-            # TODO: Implement actual query relaxation logic
             
             relaxation_suggestions = self._generate_relaxation_suggestions(session_state)
             
             return self.create_content({
                 "success": True,
+                "type": "refinement_response",  # FIXED: Add response type
                 "refinement_type": "query_relaxation",
                 "method": "rule_based",
                 "relaxation_suggestions": relaxation_suggestions,
                 "message": f"Here are some suggestions to get more results: {', '.join(relaxation_suggestions)}",
                 "session_state": session_state,
-                "trigger_search": False
+                "trigger_search": False,
+                "modifications": []  # Empty modifications
             })
                 
         except Exception as e:
             print(f"❌ Query relaxation error: {e}")
             return self.create_content({
                 "success": False,
-                "error": f"Query relaxation failed: {str(e)}"
+                "type": "refinement_response",  # FIXED: Add response type
+                "refinement_type": "query_relaxation", 
+                "error": f"Query relaxation failed: {str(e)}",
+                "modifications": []  # Empty modifications
             })
+
     
     async def _handle_auto_refinement(self, user_input: str, session_state: Dict[str, Any],
                                     memory_context: List[Dict[str, Any]], session_id: str, 
@@ -231,33 +245,28 @@ class RefinementAgent(BaseResDexAgent):
             })
     
     def _format_facets_response(self, facets_data: Dict[str, Any], user_input: str) -> str:
-        """Format facets data into user-friendly message."""
+        """Format facets data into user-friendly message - SIMPLIFIED."""
         try:
             if not facets_data:
-                return "No facets could be generated for your current search criteria."
+                return "No facet categories could be generated for your current search criteria."
             
-            # Extract facet categories
-            categories = []
+            # Count categories
+            primary_categories = len(facets_data.get("result_1", {}))
+            secondary_categories = len(facets_data.get("result_2", {}))
+            total_categories = primary_categories + secondary_categories
             
-            # Get result_1 (user details facets) - primary response
-            result_1 = facets_data.get("result_1", {})
-            if result_1:
-                categories.extend(list(result_1.keys()))
-            
-            if categories:
-                categories_str = ", ".join(categories[:5])  # Show first 5 categories
-                total_categories = len(categories)
+            if total_categories > 0:
+                category_text = f"{total_categories} facet categories"
+                if primary_categories > 0 and secondary_categories > 0:
+                    category_text = f"{primary_categories} primary and {secondary_categories} additional facet categories"
                 
-                if total_categories > 5:
-                    categories_str += f" and {total_categories - 5} more"
-                
-                return f"I've generated facets for your search including: {categories_str}. These facets will help you drill down and refine your candidate search."
+                return f"🔍 Generated {category_text} for your search. Browse the category titles below to explore available facets."
             else:
-                return "Facets have been generated for your search criteria."
+                return "Facet categories have been generated for your search criteria."
                 
         except Exception as e:
             logger.error(f"Error formatting facets response: {e}")
-            return "Facets have been generated for your search."
+            return "Facet categories have been generated for your search."
     
     def _create_user_friendly_facets(self, facets_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create user-friendly facet display data."""

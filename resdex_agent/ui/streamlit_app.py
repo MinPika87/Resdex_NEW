@@ -16,6 +16,7 @@ from resdex_agent.ui.components.candidate_display import CandidateDisplay
 from resdex_agent.ui.components.chat_interface import ChatInterface
 from resdex_agent.ui.components.step_display import StepDisplay
 from resdex_agent.utils.step_logger import step_logger
+from resdex_agent.ui.components.facet_display import FacetDisplay
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class StreamlitApp:
         self.candidate_display = None
         self.chat_interface = None
         self.step_display = StepDisplay()
-        
+        self.facet_display = None
         logger.info("Memory-Enhanced Streamlit app initialized with ResDex Agent")
     
     def run(self):
@@ -59,7 +60,7 @@ class StreamlitApp:
         self._render_header_with_memory()
         self._render_main_content()
         self._render_sidebar_with_memory()
-    
+        
     def _initialize_session_state_with_memory(self):
         """Initialize Streamlit session state with memory support."""
         defaults = {
@@ -341,9 +342,6 @@ class StreamlitApp:
                 # After search: Show the memory-enhanced chat interface
                 if st.session_state['candidates']:
                     self.chat_interface.render()
-                    
-                    # NEW: Add facet generation quick action
-                    st.markdown("---")
                     st.markdown("#### 🔍 **Quick Refinement**")
                     
                     if st.button("✨ Generate Facets", help="Generate interactive facets for current search"):
@@ -428,6 +426,10 @@ class StreamlitApp:
     async def _generate_facets_for_current_search(self, session_id: str):
         """Generate facets for the current search criteria."""
         try:
+            # Clear previous facets
+            st.session_state['current_facets'] = {}
+            st.session_state['facets_available'] = False
+            
             # Get current session state
             current_state = self._get_clean_session_state_for_facets()
             
@@ -440,7 +442,7 @@ class StreamlitApp:
                 "user_id": st.session_state['user_id']
             })
             
-            with st.spinner("🎨 Generating interactive facets..."):
+            with st.spinner("🎨 Generating facet categories..."):
                 result = await self.root_agent.execute(content)
                 
                 if result.data.get("success") and result.data.get("facets_data"):
@@ -450,13 +452,17 @@ class StreamlitApp:
                     st.session_state['facet_interaction_count'] += 1
                     
                     # Add success message to chat
-                    facet_message = "🎨 **Interactive facets generated!** Click any facet item below to add it to your search filters and refine your results."
-                    st.session_state['chat_history'].append({
-                        "role": "assistant",
-                        "content": facet_message
-                    })
+                    facet_message = "🎨 **Facet categories generated!** Browse the category cards below to explore available facets."
                     
-                    st.success("✨ Interactive facets generated! Scroll down to see them.")
+                    # Avoid duplicate messages
+                    chat_history = st.session_state.get('chat_history', [])
+                    if not chat_history or chat_history[-1].get('content') != facet_message:
+                        st.session_state['chat_history'].append({
+                            "role": "assistant", 
+                            "content": facet_message
+                        })
+                    
+                    st.success("✨ Facet categories generated! Scroll up to see them.")
                     
                 else:
                     error_msg = result.data.get("error", "Facet generation failed")
@@ -465,7 +471,7 @@ class StreamlitApp:
                     # Add error to chat
                     st.session_state['chat_history'].append({
                         "role": "assistant",
-                        "content": f"❌ Sorry, I couldn't generate facets: {error_msg}"
+                        "content": f"❌ Sorry, I couldn't generate facet categories: {error_msg}"
                     })
             
             st.experimental_rerun()
@@ -668,15 +674,18 @@ class StreamlitApp:
                 "error": str(e),
                 "status": "unhealthy"
             }
-    
+    # Add this CSS fix to streamlit_app.py _get_custom_css method
+
     def _get_custom_css(self) -> str:
-        """Get custom CSS for the application with memory and facet enhancements."""
+        """Get custom CSS for the application with fixed facet rendering."""
         return """
         <style>
+        /* Base app styling */
         .stApp {
             background-color: #f8f9fa;
         }
         
+        /* Skill tag styling */
         .skill-tag {
             background-color: #e9ecef;
             padding: 0.25rem 0.5rem;
@@ -691,6 +700,7 @@ class StreamlitApp:
             border: 1px solid #fdcb6e;
         }
         
+        /* Candidate card styling */
         .candidate-card {
             border: 1px solid #dee2e6;
             border-radius: 0.5rem;
@@ -700,6 +710,7 @@ class StreamlitApp:
             box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
         }
         
+        /* Chat message styling */
         .chat-message {
             padding: 0.5rem;
             margin: 0.25rem 0;
@@ -730,40 +741,61 @@ class StreamlitApp:
             background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
         }
         
-        /* NEW: Facet styling */
-        .facet-container {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-radius: 12px;
-            padding: 16px;
-            margin: 8px 0;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            border: 1px solid #dee2e6;
+        /* FIXED: Facet category styling - Ensure proper HTML rendering */
+        
+        /* Override any Streamlit markdown styling that might interfere */
+        .stMarkdown div[data-testid="stMarkdownContainer"] {
+            overflow: visible !important;
         }
         
-        .facet-category {
-            font-weight: 600;
-            font-size: 16px;
-            margin-bottom: 12px;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #dee2e6;
+        /* Ensure facet containers render properly */
+        div[data-testid="stVerticalBlock"] div[data-testid="stMarkdownContainer"] > div {
+            overflow: visible !important;
         }
         
-        .facet-item-button {
-            transition: all 0.2s ease;
-            margin: 4px 2px;
+        /* Facet card hover effects */
+        .facet-card:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15) !important;
+            transition: all 0.3s ease !important;
         }
         
-        .facet-item-button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        /* Prevent text selection on facet cards */
+        .facet-card {
+            user-select: none !important;
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
         }
         
-        /* Hide Streamlit menu and footer */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
+        /* Ensure proper box model for facet cards */
+        .facet-card * {
+            box-sizing: border-box !important;
+        }
         
-        /* Animation for live steps */
+        /* Fix any overflow issues */
+        .element-container {
+            overflow: visible !important;
+        }
+        
+        /* Animation for facet cards */
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Apply animation to facet cards */
+        div[style*="border: 2px solid"] {
+            animation: slideInUp 0.4s ease-out !important;
+        }
+        
+        /* Step container animations */
         @keyframes fadeInUp {
             from {
                 opacity: 0;
@@ -779,20 +811,25 @@ class StreamlitApp:
             animation: fadeInUp 0.3s ease-out;
         }
         
-        /* Facet animations */
-        @keyframes slideInRight {
-            from {
-                opacity: 0;
-                transform: translateX(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
+        /* Hide Streamlit menu and footer */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        
+        /* Improve overall layout */
+        .main .block-container {
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+            max-width: 100%;
         }
         
-        .facet-container {
-            animation: slideInRight 0.4s ease-out;
+        /* Responsive design for facet cards */
+        @media (max-width: 768px) {
+            div[style*="border: 2px solid"] {
+                margin: 4px 0 !important;
+                padding: 12px !important;
+                min-height: 100px !important;
+            }
         }
         </style>
         """
