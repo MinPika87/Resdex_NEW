@@ -136,10 +136,11 @@ class SearchInteractionAgent(BaseResDexAgent):
                 "total_count": 0
             })
     
+
     async def _handle_filter_operation(self, user_input: str, session_state: Dict[str, Any],
-                                     memory_context: List[Dict[str, Any]], session_id: str, 
-                                     user_id: str) -> Content:
-        """Handle filter operations with simplified intent processing."""
+                                    memory_context: List[Dict[str, Any]], session_id: str, 
+                                    user_id: str) -> Content:
+        """Handle filter operations with array support for multiple intents."""
         try:
             print(f"🔧 FILTER OPERATION: Processing '{user_input}'")
             
@@ -147,6 +148,7 @@ class SearchInteractionAgent(BaseResDexAgent):
             if self._is_search_execution_request(user_input):
                 print(f"🔍 DETECTED SEARCH EXECUTION REQUEST")
                 return await self._handle_search_execution(user_input, session_state, session_id)
+            
             validation_result = await self.tools["validation_tool"](
                 validation_type="user_input",
                 data=user_input
@@ -172,7 +174,7 @@ class SearchInteractionAgent(BaseResDexAgent):
             
             print(f"🔍 Current filters: {current_filters}")
             
-            # Extract intent using LLM (SIMPLIFIED - single call)
+            # Extract intent using LLM (FIXED - handle arrays)
             llm_result = await self.tools["llm_tool"](
                 user_input=user_input,
                 current_filters=current_filters,
@@ -189,11 +191,23 @@ class SearchInteractionAgent(BaseResDexAgent):
             intent_data = llm_result["intent_data"]
             print(f"🎯 Intent extracted: {intent_data}")
             
-            # Process the intent using intent processor
-            processing_result = await self.tools["intent_processor"](
-                intent_data=intent_data,
-                session_state=session_state
-            )
+            # FIXED: Handle both single intent and array of intents
+            if isinstance(intent_data, list):
+                print(f"🔍 Processing array of {len(intent_data)} intents")
+                
+                # Process all intents using intent processor
+                processing_result = await self.tools["intent_processor"](
+                    intent_data=intent_data,  # Pass the entire array
+                    session_state=session_state
+                )
+            else:
+                print(f"🔍 Processing single intent")
+                
+                # Process single intent using intent processor
+                processing_result = await self.tools["intent_processor"](
+                    intent_data=intent_data,
+                    session_state=session_state
+                )
             
             # Handle candidate operations if no filters were modified
             if processing_result["success"] and not processing_result.get("modifications"):

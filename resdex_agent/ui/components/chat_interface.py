@@ -40,7 +40,13 @@ class ChatInterface:
             self.session_state['conversation_session_id'] = str(uuid.uuid4())
         
         print(f"🧠 ChatInterface initialized with memory for user: {self.session_state['user_id']}")
-
+    def _render_relaxation_in_sidebar(self):
+        """Render relaxation suggestions in sidebar if available."""
+        if self.session_state.get('relaxation_available') and self.session_state.get('current_relaxation_data'):
+            # Use the relaxation display component to render in sidebar
+            from .relaxation_display import RelaxationDisplay
+            relaxation_display = RelaxationDisplay(self.session_state, self.root_agent)
+            relaxation_display.render_relaxation_in_sidebar(self.session_state['current_relaxation_data'])
     def render(self):
         """Render the complete chat interface with memory features."""
         st.markdown("### 🤖 AI Assistant with Memory")
@@ -60,6 +66,7 @@ class ChatInterface:
         
         # NEW: Render facets if available (in sidebar)
         self._render_facets_in_sidebar()
+        self._render_relaxation_in_sidebar()
 
     def _render_facets_in_sidebar(self):
         """Render facets in sidebar if available."""
@@ -462,6 +469,7 @@ class ChatInterface:
             return False
     
     async def _handle_search_response_with_memory(self, result, user_id: str, conversation_session_id: str, update_callback):
+        """ENHANCED method with query relaxation support."""
         try:
             step_logger.log_step("🔧 Processing search modifications with memory", "tool")
             update_callback()
@@ -476,13 +484,13 @@ class ChatInterface:
                     update_callback()
                     await asyncio.sleep(0.5)
             
-            # Check response type to prevent double messages
+            # Check response type to handle different agent responses
             response_type = result.data.get("type", "")
             refinement_type = result.data.get("refinement_type", "")
             
             # Handle refinement responses specially
-            if response_type == "refinement_response" or refinement_type in ["facet_generation", "query_relaxation"]:
-                step_logger.log_step("🎯 Refinement response processed", "refinement")
+            if response_type == "refinement_response":
+                step_logger.log_step(f"🎯 Refinement response processed: {refinement_type}", "refinement")
                 update_callback()
                 
                 # Handle facet generation
@@ -492,36 +500,12 @@ class ChatInterface:
                     self.session_state['current_facets'] = facets_data
                     self.session_state['facets_available'] = True
                     
-                    # Add ONLY ONE summary message to chat
-                    primary_count = len(facets_data.get("result_1", {}))
-                    secondary_count = len(facets_data.get("result_2", {}))
-                    total_count = primary_count + secondary_count
+                    # Create enhanced facet summary message
+                    total_items = self._count_total_facet_items(facets_data)
+                    facet_message = self._create_enhanced_facet_summary_for_chat(facets_data, total_items)
                     
-                    total_items = 0
-                    try:
-                        for result_key in ["result_1", "result_2"]:
-                            result_data = facets_data.get(result_key, {})
-                            for category_data in result_data.values():
-                                total_items += self._count_items_in_facet_category(category_data)
-                    except Exception:
-                        total_items = 0
-                    
-                    # Get sample category names for the message
-                    sample_categories = []
-                    if facets_data.get("result_1"):
-                        sample_categories.extend(list(facets_data["result_1"].keys())[:2])
-                    if facets_data.get("result_2") and len(sample_categories) < 3:
-                        remaining_slots = 3 - len(sample_categories)
-                        sample_categories.extend(list(facets_data["result_2"].keys())[:remaining_slots])
-                    
-                    # Create enhanced summary message
-                    facet_message = self._create_enhanced_facet_summary(
-                        total_count, primary_count, secondary_count, total_items, sample_categories
-                    )
-                    
-                    # Check for duplicates
-                    chat_history = self.session_state.get('chat_history', [])
-                    if not chat_history or chat_history[-1].get('content') != facet_message:
+                    # Check for duplicates and add message
+                    if not self._is_duplicate_chat_message(facet_message):
                         self.session_state['chat_history'].append({
                             "role": "assistant",
                             "content": facet_message
@@ -530,15 +514,37 @@ class ChatInterface:
                     step_logger.log_completion("Enhanced facets ready for sidebar display")
                     update_callback()
                 
+                # NEW: Handle query relaxation
+                elif refinement_type == "query_relaxation":
+                    relaxation_data = result.data
+                    
+                    # Store relaxation data for sidebar and future use
+                    self.session_state['current_relaxation_data'] = relaxation_data
+                    self.session_state['relaxation_available'] = True
+                    
+                    # Create enhanced relaxation summary message
+                    relaxation_message = self._create_enhanced_relaxation_summary_for_chat(relaxation_data)
+                    
+                    # Check for duplicates and add message
+                    if not self._is_duplicate_chat_message(relaxation_message):
+                        self.session_state['chat_history'].append({
+                            "role": "assistant",
+                            "content": relaxation_message
+                        })
+                    
+                    step_logger.log_completion("Query relaxation suggestions ready")
+                    update_callback()
+                
                 # Don't process further for refinement responses
                 return
             
             # Regular message handling for non-refinement responses
             ai_message = result.data.get("message", "Request processed successfully.")
-            self.session_state['chat_history'].append({
-                "role": "assistant",
-                "content": ai_message
-            })
+            if not self._is_duplicate_chat_message(ai_message):
+                self.session_state['chat_history'].append({
+                    "role": "assistant",
+                    "content": ai_message
+                })
             
             # Add interaction result to conversation memory
             if self.session_manager:
@@ -550,26 +556,105 @@ class ChatInterface:
                         "modifications": result.data.get("modifications", []),
                         "trigger_search": result.data.get("trigger_search", False),
                         "response": ai_message,
-                        "success": result.data.get("success", True)
+                        "success": result.data.get("success", True),
+                        "response_type": response_type,
+                        "refinement_type": refinement_type
                     }
                 )
             
-            # Rest of the method remains the same...
-            # (search trigger logic, etc.)
-            
+            # Handle search triggering
+            if result.data.get("trigger_search", False):
+                step_logger.log_step("🚀 Search triggered by agent", "search")
+                update_callback()
+                await asyncio.sleep(0.5)
+                
+                await self._handle_triggered_search_with_memory(
+                    result.data, user_id, conversation_session_id, update_callback
+                )
+            else:
+                step_logger.log_completion("Request processed without search trigger")
+                update_callback()
+                
         except Exception as e:
             step_logger.log_error(f"Search response handling failed: {str(e)}")
             update_callback()
             
             error_msg = f"❌ Error processing request: {str(e)}"
-            self.session_state['chat_history'].append({
-                "role": "assistant",
-                "content": error_msg
-            })
+            if not self._is_duplicate_chat_message(error_msg):
+                self.session_state['chat_history'].append({
+                    "role": "assistant",
+                    "content": error_msg
+                })
             
             print(f"❌ _handle_search_response_with_memory failed: {e}")
             import traceback
             traceback.print_exc()
+    def _is_duplicate_chat_message(self, new_message: str) -> bool:
+        """Check if the new message is a duplicate of the last chat message."""
+        chat_history = self.session_state.get('chat_history', [])
+        if not chat_history:
+            return False
+        
+        last_message = chat_history[-1].get('content', '')
+        
+        # Simple duplicate check - could be enhanced with fuzzy matching
+        return new_message.strip() == last_message.strip()
+    def _create_enhanced_facet_summary_for_chat(self, facets_data: Dict[str, Any], total_items: int) -> str:
+        """Create enhanced facet summary for chat (existing method with improvements)."""
+        # This method already exists - enhance it to be consistent with relaxation messaging
+        try:
+            if not facets_data:
+                return "No facet categories could be generated for your current search criteria."
+            
+            # Count categories
+            primary_categories = len(facets_data.get("result_1", {}))
+            secondary_categories = len(facets_data.get("result_2", {}))
+            total_categories = primary_categories + secondary_categories
+            
+            if total_categories > 0:
+                # Get sample category names
+                sample_categories = []
+                if facets_data.get("result_1"):
+                    sample_categories.extend(list(facets_data["result_1"].keys())[:2])
+                if facets_data.get("result_2") and len(sample_categories) < 3:
+                    remaining_slots = 3 - len(sample_categories)
+                    sample_categories.extend(list(facets_data["result_2"].keys())[:remaining_slots])
+                
+                categories_text = f'"{sample_categories[0]}"' if sample_categories else "various categories"
+                if len(sample_categories) > 1:
+                    categories_text += f', "{sample_categories[1]}"'
+                if len(sample_categories) > 2:
+                    categories_text += f', and "{sample_categories[2]}"'
+                if total_categories > len(sample_categories):
+                    remaining = total_categories - len(sample_categories)
+                    categories_text += f" (+ {remaining} more)"
+                
+                breakdown_text = f"{primary_categories} primary and {secondary_categories} additional categories" if primary_categories > 0 and secondary_categories > 0 else f"{total_categories} categories"
+                items_text = f"{total_items:,} items" if total_items > 0 else "multiple items"
+                
+                enhanced_message = f"""I analyzed your search results and generated comprehensive facets:
+
+    🔍 **Facet Generation Complete**
+
+    📊 **Generated {total_categories} facet categories** ({breakdown_text}) with {items_text} across all categories
+
+    🎯 **Categories include:** {categories_text}
+
+    💡 **Use these insights** to:
+    • Explore different aspects of your candidate pool
+    • Identify skill clusters and job role patterns  
+    • Refine your search with specific facet values
+    • Understand the composition of your results
+
+    🔍 **Browse the colorful category cards below** to dive into specific facets!"""
+                
+                return enhanced_message
+            else:
+                return "Facet categories have been generated for your search criteria."
+                
+        except Exception as e:
+            logger.error(f"Error formatting facets response: {e}")
+            return "Facet categories have been generated for your search."
     def _create_enhanced_facet_summary(self, total_count: int, primary_count: int, 
                                  secondary_count: int, total_items: int, 
                                  sample_categories: List[str]) -> str:
@@ -613,6 +698,106 @@ class ChatInterface:
     🎯 **Use these insights** to refine your search criteria or identify new skill areas and job roles in your results."""
         
         return enhanced_message
+
+    def _create_enhanced_relaxation_summary_for_chat(self, relaxation_data: Dict[str, Any]) -> str:
+        """Create an enhanced, informative relaxation summary message for chat."""
+        try:
+            suggestions = relaxation_data.get("relaxation_suggestions", [])
+            current_count = relaxation_data.get("current_count", 0)
+            estimated_increase = relaxation_data.get("estimated_new_count", 0)
+            method = relaxation_data.get("method", "unknown")
+            
+            if not suggestions:
+                return "I analyzed your search criteria but couldn't generate specific relaxation suggestions at this time."
+            
+            # Count suggestion types
+            suggestion_types = {}
+            high_confidence_count = 0
+            
+            for suggestion in suggestions:
+                suggestion_type = suggestion.get('type', 'general')
+                suggestion_types[suggestion_type] = suggestion_types.get(suggestion_type, 0) + 1
+                
+                if suggestion.get('confidence', 0) >= 0.8:
+                    high_confidence_count += 1
+            
+            # Create type breakdown text
+            type_names = {
+                'skill_relaxation': 'skill optimization',
+                'experience_relaxation': 'experience range expansion', 
+                'location_relaxation': 'location broadening',
+                'salary_relaxation': 'salary range adjustment',
+                'remote_work': 'remote work options'
+            }
+            
+            type_descriptions = []
+            for suggestion_type, count in suggestion_types.items():
+                type_name = type_names.get(suggestion_type, suggestion_type.replace('_', ' '))
+                if count == 1:
+                    type_descriptions.append(type_name)
+                else:
+                    type_descriptions.append(f"{count} {type_name} strategies")
+            
+            types_text = ", ".join(type_descriptions) if type_descriptions else "various strategies"
+            
+            # Create impact text
+            if estimated_increase > 0:
+                if current_count > 0:
+                    improvement_pct = int((estimated_increase / current_count) * 100)
+                    impact_text = f"potentially increasing your candidate pool by **{estimated_increase:,} candidates** ({improvement_pct}% improvement)"
+                else:
+                    impact_text = f"potentially finding **{estimated_increase:,} additional candidates**"
+            else:
+                impact_text = "with **significant potential** for increasing your results"
+            
+            # Create confidence text
+            if high_confidence_count > 0:
+                confidence_text = f"**{high_confidence_count} high-confidence recommendations** "
+            else:
+                confidence_text = ""
+            
+            # Create method text
+            method_text = ""
+            if method == "api_integration":
+                method_text = "using advanced query analysis"
+            elif method in ["rule_based_fallback", "rule_based"]:
+                method_text = "using intelligent rule-based analysis"
+            
+            # Build the enhanced message
+            enhanced_message = f"""I analyzed your search constraints {method_text} and found **{len(suggestions)} optimization opportunities**:
+
+    🔄 **Query Relaxation Analysis Complete**
+
+    📊 **Recommendations:** {types_text} {impact_text}
+
+    {f"🎯 **{confidence_text}** are available for immediate implementation" if high_confidence_count > 0 else "💡 **Multiple strategies** are available to explore"}
+
+    🛠️ **Next Steps:** 
+    • Review the detailed suggestion cards below
+    • Apply individual suggestions or try multiple approaches  
+    • Each suggestion shows expected impact and confidence level
+
+    💡 **Pro Tip:** Start with the highest confidence suggestions for the best results!"""
+            
+            return enhanced_message
+            
+        except Exception as e:
+            logger.error(f"Error creating relaxation summary: {e}")
+            return f"I've generated {len(relaxation_data.get('relaxation_suggestions', []))} suggestions to help expand your candidate search. Review the options below to see which approach works best."
+    def _count_total_facet_items(self, facets_data: Dict[str, Any]) -> int:
+        """Count total items across all facet categories."""
+        total_items = 0
+        
+        try:
+            for result_key in ["result_1", "result_2"]:
+                result_data = facets_data.get(result_key, {})
+                for category_data in result_data.values():
+                    total_items += self._count_items_in_facet_category(category_data)
+        except Exception:
+            total_items = 0
+        
+        return total_items
+
 
     def _count_items_in_facet_category(self, category_data: Dict[str, Any]) -> int:
         """Count items in facet category (helper method)."""

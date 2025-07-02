@@ -195,7 +195,7 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             })
     
     async def _try_intelligent_routing(self, content: Content, session_id: str, user_id: str) -> Content:
-        """NEW: Intelligent multi-intent orchestration with expansion and refinement support."""
+        """FIXED intelligent routing that respects LLM decisions for single intents."""
         user_input = content.data.get("user_input", "")
         session_state = content.data.get("session_state", {})
         
@@ -215,29 +215,72 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
                 intent_breakdown, user_input, session_state, session_id, user_id
             )
         
-        # Only fall through to single-intent routing if NOT multi-intent
-        print(f"🔄 SINGLE INTENT ROUTING (multi-intent not detected)")
+        # STEP 2: Handle single intent from LLM analysis
+        if intent_breakdown["success"] and intent_breakdown.get("intents"):
+            intents = intent_breakdown.get("intents", [])
+            
+            if len(intents) == 1:
+                first_intent = intents[0]
+                target_agent = first_intent.get("target_agent")
+                intent_type = first_intent.get("intent_type")
+                
+                print(f"🎯 LLM SINGLE INTENT ROUTING: target_agent={target_agent}, intent_type={intent_type}")
+                
+                # FIXED: Route based on LLM analysis instead of keyword fallback
+                if target_agent == "search_interaction":
+                    if session_id:
+                        step_logger.log_step("🎯 Routing to SearchInteractionAgent (LLM Analysis)", "routing")
+                    return await self._route_to_agent("search_interaction", content, session_id)
+                
+                elif target_agent == "expansion":
+                    if session_id:
+                        step_logger.log_step("🎯 Routing to ExpansionAgent (LLM Analysis)", "routing")
+                    return await self._route_to_agent("expansion", content, session_id)
+                
+                elif target_agent == "refinement":
+                    if session_id:
+                        step_logger.log_step("🎯 Routing to RefinementAgent (LLM Analysis)", "routing")
+                    return await self._route_to_agent("refinement", content, session_id)
+                
+                elif target_agent == "general_query":
+                    if session_id:
+                        step_logger.log_step("🎯 Routing to GeneralQueryAgent (LLM Analysis)", "routing")
+                    return await self._route_to_agent("general_query", content, session_id)
         
-        # STEP 2: Enhanced Single Intent Routing with refinement support
+        # STEP 3: Only use keyword-based routing if LLM analysis completely fails
+        print(f"🔄 FALLBACK ROUTING (LLM analysis failed or no intents)")
+        
+        # Enhanced Single Intent Routing with refinement support (FALLBACK ONLY)
         input_lower = user_input.lower()
         
-        # NEW: Route to RefinementAgent for facet generation and query relaxation
+        # NEW: Route to RefinementAgent for both facet generation and query relaxation
         if "refinement" in self.sub_agents:
-            refinement_indicators = [
-                # Facet generation
+            # Facet generation indicators
+            facet_indicators = [
                 "facets", "categories", "drill down", "refine", "breakdown",
                 "show categories", "categorize", "group by", "segment",
-                "facet generation", "generate facets", "show facets",
-                
-                # Query relaxation
-                "relax", "broaden", "more results", "expand search",
-                "fewer filters", "less strict", "widen", "loosen",
-                "relax search", "broaden search", "get more candidates"
+                "facet generation", "generate facets", "show facets"
             ]
             
-            if any(indicator in input_lower for indicator in refinement_indicators):
+            # Query relaxation indicators  
+            relaxation_indicators = [
+                "relax", "broaden", "more results", "expand search",
+                "fewer filters", "less strict", "widen", "loosen",
+                "relax search", "broaden search", "get more candidates",
+                "not enough results", "too few candidates", "increase results",
+                "need more candidates", "current search too narrow", "search is too restrictive"
+            ]
+            
+            has_facet = any(indicator in input_lower for indicator in facet_indicators)
+            has_relaxation = any(indicator in input_lower for indicator in relaxation_indicators)
+            
+            if has_facet:
                 if session_id:
-                    step_logger.log_step("🎯 Routing to RefinementAgent", "routing")
+                    step_logger.log_step("🎯 Routing to RefinementAgent (Facet Generation - Fallback)", "routing")
+                return await self._route_to_agent("refinement", content, session_id)
+            elif has_relaxation:
+                if session_id:
+                    step_logger.log_step("🎯 Routing to RefinementAgent (Query Relaxation - Fallback)", "routing")
                 return await self._route_to_agent("refinement", content, session_id)
         
         # ENHANCED: Route to ExpansionAgent for all expansion types
@@ -261,7 +304,7 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             
             if any(indicator in input_lower for indicator in expansion_indicators):
                 if session_id:
-                    step_logger.log_step("🎯 Routing to ExpansionAgent", "routing")
+                    step_logger.log_step("🎯 Routing to ExpansionAgent (Fallback)", "routing")
                 return await self._route_to_agent("expansion", content, session_id)
         
         # Route to GeneralQueryAgent if available  
@@ -269,13 +312,13 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
             general_indicators = ["hi", "hello", "help", "what can you", "explain", "how do"]
             if any(indicator in input_lower for indicator in general_indicators):
                 if session_id:
-                    step_logger.log_step("🎯 Routing to GeneralQueryAgent", "routing")
+                    step_logger.log_step("🎯 Routing to GeneralQueryAgent (Fallback)", "routing")
                 return await self._route_to_agent("general_query", content, session_id)
         
-        # Default to SearchInteractionAgent
+        # Default to SearchInteractionAgent (Fallback)
         if "search_interaction" in self.sub_agents:
             if session_id:
-                step_logger.log_step("🎯 Routing to SearchInteractionAgent", "routing")
+                step_logger.log_step("🎯 Routing to SearchInteractionAgent (Default Fallback)", "routing")
             return await self._route_to_agent("search_interaction", content, session_id)
         
         # If no agents available, use original logic
@@ -387,6 +430,7 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
     Current session context:
     - Active skills: {session_state.get('keywords', [])}
     - Experience: {session_state.get('min_exp', 0)}-{session_state.get('max_exp', 10)} years
+    - Salary: {session_state.get('min_salary',0)}-{session_state.get('max_salary'),0} lakhs
     - Current locations: {session_state.get('current_cities', [])}
 
     CRITICAL AGENT ROUTING RULES:
@@ -394,13 +438,13 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
     2. **Title Expansion**: If user mentions "similar titles to X" or "related titles/roles/positions" → target_agent: "expansion"  
     3. **Location Expansion**: If user mentions "nearby to X" or "similar locations" → target_agent: "expansion"
     4. **Facet Generation**: If user mentions "facets", "categories", "drill down", "refine", "breakdown" → target_agent: "refinement"
-    5. **Query Relaxation**: If user mentions "relax", "broaden", "more results", "expand search" → target_agent: "refinement"
+    5. **Query Relaxation**: If user mentions "relax", "broaden", "more results", "expand search", "not enough results", "too few candidates" → target_agent: "refinement"
     6. **Filter Operations**: location/skills/Experience/salary modifications → target_agent: "search_interaction" without expansion filter
+    6.a. Send all filter operations at once to the search interaction agent. If the user enter multiple filter operations in the query, accumulate them and send at once to the search_interaction agent to proceed (means all filter operations (which are not expansion or refinement) are one intent)
     7. **Search Execution**: Final search trigger → target_agent: "search_interaction"
     8. **Expansion**: If the user mentions "similar skills/titles/locations to X and Y and .... then this is a single intent query
     9. **Expansion**: If the user mentions "similar skills to X and similar titles to Y" then this is a multi intent query
     10. **Expansion**: If the user mentions "similar skills to X, similar skills to Y" then this is a multi intent query
-
     INTELLIGENT QUERY FORMATTING:
     When creating extracted_query for expansion agent, ALWAYS format it properly:
     - For skills: "similar skills to [SKILL_NAME]" (e.g., "similar skills to Python")
@@ -423,13 +467,24 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
     Input: "expand frontend skills"
     → Extract: ["frontend"]
     → Format: "similar skills to frontend"
+
+    QUERY RELAXATION INTENT DETECTION:
+    User expressions that indicate need for query relaxation:
+    - "relax search", "broaden search", "more results", "expand search"
+    - "not enough candidates", "too few results", "increase results"
+    - "loosen criteria", "less strict", "widen search"
+    - "get more candidates", "find more profiles", "need more options"
+    - "current search too narrow", "search is too restrictive"
     
+    **For Refinement Agent:**
+    - Facet Generation: "generate facets for [CONTEXT]" (e.g., "generate facets for python developers")
+    - Query Relaxation: "relax search for [CONTEXT]" (e.g., "relax search for more candidates")
+
     REFINEMENT INTENT TYPES:
     - facet_generation: Generate categorical facets from search results
     - query_relaxation: Relax search constraints for more results
 
     Break down the query into individual intents:
-
     {{
         "is_multi_intent": true/false,
         "total_intents": number,
@@ -571,6 +626,135 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         ]
     }}
 
+    Input: "relax search criteria to get more candidates"
+    Output: {{
+        "is_multi_intent": false,
+        "total_intents": 1,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "query_relaxation",
+                "target_agent": "refinement",
+                "extracted_query": "relax search for more candidates",
+                "raw_entities": ["more", "candidates"],
+                "execution_order": 1,
+                "description": "Relax search constraints to increase candidate pool"
+            }}
+        ]
+    }}
+
+    Input: "not enough results, broaden the search"
+    Output: {{
+        "is_multi_intent": false,
+        "total_intents": 1,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "query_relaxation",
+                "target_agent": "refinement",
+                "extracted_query": "broaden search for more results",
+                "raw_entities": ["results", "search"],
+                "execution_order": 1,
+                "description": "Broaden search criteria for more results"
+            }}
+        ]
+    }}
+
+    Input: "similar skills to Python and relax experience criteria"
+    Output: {{
+        "is_multi_intent": true,
+        "total_intents": 2,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "skill_expansion",
+                "target_agent": "expansion",
+                "extracted_query": "similar skills to Python",
+                "raw_entities": ["Python"],
+                "execution_order": 1,
+                "description": "Find skills similar to Python"
+            }},
+            {{
+                "intent_id": 2,
+                "intent_type": "query_relaxation",
+                "target_agent": "refinement",
+                "extracted_query": "relax search for experience criteria",
+                "raw_entities": ["experience", "criteria"],
+                "execution_order": 2,
+                "description": "Relax experience requirements"
+            }}
+        ]
+    }}
+
+    Input: "expand Python skills and show categories and get more results"
+    Output: {{
+        "is_multi_intent": true,
+        "total_intents": 3,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "skill_expansion",
+                "target_agent": "expansion",
+                "extracted_query": "similar skills to Python",
+                "raw_entities": ["Python"],
+                "execution_order": 1,
+                "description": "Find skills similar to Python"
+            }},
+            {{
+                "intent_id": 2,
+                "intent_type": "facet_generation",
+                "target_agent": "refinement",
+                "extracted_query": "generate facets",
+                "raw_entities": [],
+                "execution_order": 2,
+                "description": "Generate facets after skill expansion"
+            }},
+            {{
+                "intent_id": 3,
+                "intent_type": "query_relaxation",
+                "target_agent": "refinement",
+                "extracted_query": "relax search for more results",
+                "raw_entities": ["more", "results"],
+                "execution_order": 3,
+                "description": "Relax search constraints for more candidates"
+            }}
+        ]
+    }}
+
+    Input: "need more candidates"
+    Output: {{
+        "is_multi_intent": false,
+        "total_intents": 1,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "query_relaxation",
+                "target_agent": "refinement",
+                "extracted_query": "relax search for more candidates",
+                "raw_entities": ["more", "candidates"],
+                "execution_order": 1,
+                "description": "Generate suggestions to get more candidates"
+            }}
+        ]
+    }}
+
+    Input: "too few results, suggest improvements"
+    Output: {{
+        "is_multi_intent": false,
+        "total_intents": 1,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "query_relaxation",
+                "target_agent": "refinement",
+                "extracted_query": "relax search for more results",
+                "raw_entities": ["results", "improvements"],
+                "execution_order": 1,
+                "description": "Generate relaxation suggestions for more results"
+            }}
+        ]
+    }}
+
     Return ONLY the JSON response."""
 
         try:
@@ -585,11 +769,13 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
                 if "parsed_response" in llm_result and llm_result["parsed_response"]:
                     breakdown = llm_result["parsed_response"]
                     
-                    # ENHANCED: Validate and improve extracted queries for refinement
+                    # ENHANCED: Validate and improve extracted queries for both refinement types
                     if "intents" in breakdown:
                         for intent in breakdown["intents"]:
-                            # Ensure the extracted_query is properly formatted for refinement
-                            if intent.get("target_agent") == "refinement":
+                            target_agent = intent.get("target_agent")
+                            
+                            # Handle refinement queries (both facet generation and query relaxation)
+                            if target_agent == "refinement":
                                 original_query = intent.get("extracted_query", "")
                                 improved_query = self._ensure_proper_refinement_format(
                                     original_query, 
@@ -600,7 +786,7 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
                                 print(f"🔧 Improved refinement query: '{original_query}' → '{improved_query}'")
                             
                             # Handle expansion queries (existing logic)
-                            elif intent.get("target_agent") == "expansion":
+                            elif target_agent == "expansion":
                                 original_query = intent.get("extracted_query", "")
                                 improved_query = self._ensure_proper_expansion_format(
                                     original_query, 
@@ -624,10 +810,12 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
                             
                             breakdown = json.loads(json_text)
                             
-                            # Apply the same enhancement for refinement
+                            # Apply the same enhancement for all agents
                             if "intents" in breakdown:
                                 for intent in breakdown["intents"]:
-                                    if intent.get("target_agent") == "refinement":
+                                    target_agent = intent.get("target_agent")
+                                    
+                                    if target_agent == "refinement":
                                         original_query = intent.get("extracted_query", "")
                                         improved_query = self._ensure_proper_refinement_format(
                                             original_query, 
@@ -636,7 +824,7 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
                                         )
                                         intent["extracted_query"] = improved_query
                                         print(f"🔧 Improved refinement query: '{original_query}' → '{improved_query}'")
-                                    elif intent.get("target_agent") == "expansion":
+                                    elif target_agent == "expansion":
                                         original_query = intent.get("extracted_query", "")
                                         improved_query = self._ensure_proper_expansion_format(
                                             original_query, 
@@ -704,7 +892,8 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         return extracted_query
     def _ensure_proper_refinement_format(self, extracted_query: str, intent_type: str, raw_entities: List[str]) -> str:
         """
-        Ensure the extracted query is in the proper format for refinement agent.
+        ENHANCED: Ensure the extracted query is in the proper format for refinement agent.
+        Handles both facet_generation and query_relaxation intent types.
         """
         if not extracted_query or not intent_type:
             return extracted_query
@@ -712,7 +901,7 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         # If it's already in the right format, keep it
         refinement_patterns = {
             "facet_generation": ["generate facets", "show facets", "facets for", "categorize", "breakdown"],
-            "query_relaxation": ["relax", "broaden", "more results", "expand search", "loosen"]
+            "query_relaxation": ["relax", "broaden", "more results", "expand search", "loosen", "get more candidates"]
         }
         
         current_patterns = refinement_patterns.get(intent_type, [])
@@ -729,10 +918,16 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         
         elif intent_type == "query_relaxation":
             if raw_entities:
+                # Create context-aware relaxation query
                 entities_str = " and ".join(raw_entities)
-                return f"relax search for {entities_str}"
+                if "more" in raw_entities or "results" in raw_entities or "candidates" in raw_entities:
+                    return f"relax search for more candidates"
+                elif "experience" in raw_entities or "criteria" in raw_entities:
+                    return f"relax search criteria for {entities_str}"
+                else:
+                    return f"relax search for {entities_str}"
             else:
-                return "relax search"
+                return "relax search for more candidates"
         
         # Default: return as-is
         return extracted_query

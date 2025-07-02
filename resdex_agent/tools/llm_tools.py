@@ -217,14 +217,23 @@ class LLMTool(Tool):
             logger.info(f"Qwen streaming response completed: {len(full_response)} characters")
             
             if cleaned_response.strip():
-                intent_data = self.data_processor.extract_json_from_text(cleaned_response)
+                # CRITICAL FIX: Parse JSON manually to preserve arrays
+                intent_data = self._parse_intent_json(cleaned_response)
+                
+                # DEBUG: Show what we extracted
+                print(f"🔍 EXTRACTED INTENT TYPE: {type(intent_data)}")
+                if isinstance(intent_data, list):
+                    print(f"🔍 EXTRACTED INTENT ARRAY LENGTH: {len(intent_data)}")
+                    print(f"🔍 FIRST INTENT: {intent_data[0] if intent_data else 'None'}")
+                else:
+                    print(f"🔍 EXTRACTED INTENT SINGLE: {intent_data}")
                 
                 if intent_data:
                     logger.info(f"Successfully extracted intent: {intent_data}")
                     print(f"🎯 SUCCESSFULLY PARSED INTENT: {intent_data}")
                     return {
                         "success": True,
-                        "intent_data": intent_data,
+                        "intent_data": intent_data,  # This will now be the full array or single object
                         "raw_response": full_response
                     }
                 else:
@@ -254,6 +263,66 @@ class LLMTool(Tool):
                 "error": str(e),
                 "intent_data": self._default_intent_response(user_input)
             }
+
+
+    # ADD THIS NEW METHOD to your LLMTool class:
+
+    def _parse_intent_json(self, cleaned_response: str):
+        """Parse JSON response while preserving arrays - FIXED VERSION."""
+        import json
+        import re
+        
+        try:
+            # FIRST: Try direct JSON parsing (best case)
+            try:
+                parsed = json.loads(cleaned_response)
+                print(f"✅ DIRECT JSON PARSE SUCCESS: {type(parsed)}")
+                return parsed  # This preserves arrays!
+            except json.JSONDecodeError:
+                print(f"⚠️ Direct JSON parse failed, trying extraction...")
+        
+            # SECOND: Try to extract JSON from text
+            # Look for array pattern first (priority for multi-intent)
+            array_pattern = r'\[[\s\S]*?\]'
+            array_matches = re.findall(array_pattern, cleaned_response, re.MULTILINE | re.DOTALL)
+            
+            for match in array_matches:
+                try:
+                    match_clean = match.strip()
+                    # Remove trailing commas
+                    match_clean = re.sub(r',(\s*[}\]])', r'\1', match_clean)
+                    
+                    parsed = json.loads(match_clean)
+                    if isinstance(parsed, list):
+                        print(f"✅ FOUND ARRAY: {len(parsed)} items")
+                        return parsed  # Return the full array!
+                except json.JSONDecodeError:
+                    continue
+            
+            # THIRD: Look for object pattern
+            object_pattern = r'\{[\s\S]*?\}'
+            object_matches = re.findall(object_pattern, cleaned_response, re.MULTILINE | re.DOTALL)
+            
+            for match in object_matches:
+                try:
+                    match_clean = match.strip()
+                    # Remove trailing commas
+                    match_clean = re.sub(r',(\s*[}\]])', r'\1', match_clean)
+                    
+                    parsed = json.loads(match_clean)
+                    if isinstance(parsed, dict):
+                        print(f"✅ FOUND OBJECT: {parsed.get('action', 'unknown')}")
+                        return parsed  # Return the single object
+                except json.JSONDecodeError:
+                    continue
+            
+            # FOURTH: Use the data processor as last resort
+            print(f"⚠️ Using data_processor as fallback...")
+            return self.data_processor.extract_json_from_text(cleaned_response)
+            
+        except Exception as e:
+            print(f"❌ JSON parsing exception: {e}")
+            return None
     
     def _build_intent_extraction_prompt(self, current_filters: Dict[str, Any]) -> str:
         """Build system prompt for intent extraction."""

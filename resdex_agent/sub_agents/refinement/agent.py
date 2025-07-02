@@ -1,6 +1,7 @@
-# resdex_agent/sub_agents/refinement/agent.py
+# resdex_agent/sub_agents/refinement/agent.py - UPDATED with Query Relaxation
 """
 Refinement Sub-Agent for handling facet generation and query relaxation.
+UPDATED VERSION with complete query relaxation integration.
 """
 
 from typing import Dict, Any, List, Optional
@@ -18,8 +19,8 @@ class RefinementAgent(BaseResDexAgent):
     
     RESPONSIBILITIES:
     1. Facet generation from search results and current filters
-    2. Query relaxation when search results are insufficient
-    3. Integration with external facet generation API
+    2. Query relaxation when search results are insufficient  
+    3. Integration with external APIs for both features
     4. User-friendly response formatting
     """
 
@@ -34,7 +35,7 @@ class RefinementAgent(BaseResDexAgent):
         # Initialize refinement-specific tools
         self._setup_refinement_tools()
         
-        logger.info(f"RefinementAgent initialized with facet generation capabilities")
+        logger.info(f"RefinementAgent initialized with facet generation and query relaxation")
 
     @property
     def config(self):
@@ -47,11 +48,11 @@ class RefinementAgent(BaseResDexAgent):
             from ...tools.facet_generation import FacetGenerationTool
             self.tools["facet_generation"] = FacetGenerationTool("facet_generation_tool")
             
-            # Query relaxation tool (placeholder for future implementation)
-            # from ...tools.query_relaxation import QueryRelaxationTool
-            # self.tools["query_relaxation"] = QueryRelaxationTool("query_relaxation_tool")
+            # NEW: Query relaxation tool
+            from ...tools.query_relaxation_tool import QueryRelaxationTool
+            self.tools["query_relaxation"] = QueryRelaxationTool("query_relaxation_tool")
             
-            # Filter tool for applying relaxation suggestions
+            # Filter tool for applying suggestions
             from ...tools.filter_tools import FilterTool
             self.tools["filter_tool"] = FilterTool("refinement_filter_tool")
             
@@ -66,18 +67,18 @@ class RefinementAgent(BaseResDexAgent):
     async def execute_core(self, content: Content, memory_context: List[Dict[str, Any]], 
                           session_id: str, user_id: str) -> Content:
         """
-        Core refinement logic.
+        Core refinement logic with both facet generation and query relaxation.
         """
         try:
             user_input = content.data.get("user_input", "")
             session_state = content.data.get("session_state", {})
-            intent_data = content.data.get("intent_data", {})
+            intent_context = content.data.get("intent_context", {})
             
             logger.info(f"RefinementAgent processing: '{user_input}'")
             print(f"🔧 REFINEMENT AGENT: Processing '{user_input}'")
             
             # Determine refinement type
-            refinement_type = self._determine_refinement_type(user_input, intent_data)
+            refinement_type = self._determine_refinement_type(user_input, intent_context)
             
             if refinement_type == "facet_generation":
                 return await self._handle_facet_generation(user_input, session_state, memory_context, session_id, user_id)
@@ -94,13 +95,15 @@ class RefinementAgent(BaseResDexAgent):
                 "details": str(e)
             })
     
-    def _determine_refinement_type(self, user_input: str, intent_data: Dict[str, Any]) -> str:
+    def _determine_refinement_type(self, user_input: str, intent_context: Dict[str, Any]) -> str:
         """Determine the type of refinement needed."""
         input_lower = user_input.lower()
         
-        # Check intent data first
-        if intent_data.get("refinement_type"):
-            return intent_data["refinement_type"]
+        # Check intent context first
+        if intent_context.get("intent_type") == "query_relaxation":
+            return "query_relaxation"
+        elif intent_context.get("intent_type") == "facet_generation":
+            return "facet_generation"
         
         # Facet generation indicators
         facet_indicators = [
@@ -112,7 +115,9 @@ class RefinementAgent(BaseResDexAgent):
         # Query relaxation indicators
         relaxation_indicators = [
             "relax", "broaden", "more results", "expand search",
-            "fewer filters", "less strict", "widen", "loosen"
+            "fewer filters", "less strict", "widen", "loosen",
+            "relax search", "broaden search", "get more candidates",
+            "not enough results", "too few candidates", "increase results"
         ]
         
         has_facet = any(indicator in input_lower for indicator in facet_indicators)
@@ -138,7 +143,7 @@ class RefinementAgent(BaseResDexAgent):
                     "success": False,
                     "error": "Facet generation tool not available",
                     "message": "Facet generation is currently unavailable. Please try again later.",
-                    "type": "refinement_response",  # FIXED: Add response type
+                    "type": "refinement_response",
                     "refinement_type": "facet_generation"
                 })
             
@@ -161,7 +166,7 @@ class RefinementAgent(BaseResDexAgent):
                 
                 return self.create_content({
                     "success": True,
-                    "type": "refinement_response",  # FIXED: Add response type
+                    "type": "refinement_response",
                     "refinement_type": "facet_generation",
                     "method": "api_integration",
                     "facets_data": facets_data,
@@ -169,7 +174,6 @@ class RefinementAgent(BaseResDexAgent):
                     "session_state": session_state,
                     "trigger_search": False,
                     "user_friendly_display": self._create_user_friendly_facets(facets_data),
-                    # REMOVED: modifications array to prevent search triggering
                     "modifications": []  # Empty modifications
                 })
             else:
@@ -177,11 +181,11 @@ class RefinementAgent(BaseResDexAgent):
                 
                 return self.create_content({
                     "success": False,
-                    "type": "refinement_response",  # FIXED: Add response type
+                    "type": "refinement_response",
                     "refinement_type": "facet_generation",
                     "error": facet_result.get("error", "Facet generation failed"),
                     "message": "I couldn't generate facets for your current search. This might be due to insufficient data or API issues. Please try with different search criteria.",
-                    "modifications": []  # Empty modifications
+                    "modifications": []
                 })
                     
         except Exception as e:
@@ -190,44 +194,116 @@ class RefinementAgent(BaseResDexAgent):
             traceback.print_exc()
             return self.create_content({
                 "success": False,
-                "type": "refinement_response",  # FIXED: Add response type
+                "type": "refinement_response",
                 "refinement_type": "facet_generation",
                 "error": f"Facet generation failed: {str(e)}",
-                "modifications": []  # Empty modifications
+                "modifications": []
             })
 
     async def _handle_query_relaxation(self, user_input: str, session_state: Dict[str, Any],
                                     memory_context: List[Dict[str, Any]], session_id: str, 
                                     user_id: str) -> Content:
-        """Handle query relaxation requests."""
+        """Handle query relaxation requests - UPDATED with full implementation."""
         try:
             print(f"🔄 QUERY RELAXATION: Analyzing '{user_input}'")
             
-            relaxation_suggestions = self._generate_relaxation_suggestions(session_state)
-            
-            return self.create_content({
-                "success": True,
-                "type": "refinement_response",  # FIXED: Add response type
-                "refinement_type": "query_relaxation",
-                "method": "rule_based",
-                "relaxation_suggestions": relaxation_suggestions,
-                "message": f"Here are some suggestions to get more results: {', '.join(relaxation_suggestions)}",
-                "session_state": session_state,
-                "trigger_search": False,
-                "modifications": []  # Empty modifications
-            })
+            # Check if we have the query relaxation tool
+            if "query_relaxation" not in self.tools:
+                print(f"⚠️ Query relaxation tool not available, using fallback")
+                fallback_suggestions = self._generate_fallback_relaxation_suggestions(session_state)
                 
+                return self.create_content({
+                    "success": True,
+                    "type": "refinement_response",
+                    "refinement_type": "query_relaxation",
+                    "method": "rule_based_fallback",
+                    "relaxation_suggestions": fallback_suggestions,
+                    "message": f"Here are some suggestions to get more results: {', '.join([s['title'] for s in fallback_suggestions[:3]])}",
+                    "session_state": session_state,
+                    "trigger_search": False,
+                    "modifications": []
+                })
+            
+            # Call the query relaxation tool
+            relaxation_result = await self.tools["query_relaxation"](
+                session_state=session_state,
+                user_input=user_input,
+                memory_context=memory_context
+            )
+            
+            print(f"🔍 Query relaxation result: success={relaxation_result.get('success', False)}")
+            
+            if relaxation_result["success"]:
+                print(f"✅ Query relaxation successful")
+                
+                suggestions = relaxation_result.get("suggestions", [])
+                current_count = relaxation_result.get("current_count", 0)
+                estimated_new_count = relaxation_result.get("estimated_new_count", 0)
+                
+                # Format comprehensive response
+                message = relaxation_result.get("message", "Query relaxation suggestions generated")
+                
+                return self.create_content({
+                    "success": True,
+                    "type": "refinement_response",
+                    "refinement_type": "query_relaxation",
+                    "method": "api_integration",
+                    "relaxation_suggestions": suggestions,
+                    "relaxation_data": relaxation_result.get("relaxation_data", {}),
+                    "current_count": current_count,
+                    "estimated_new_count": estimated_new_count,
+                    "message": message,
+                    "session_state": session_state,
+                    "trigger_search": False,
+                    "user_friendly_display": self._create_user_friendly_relaxation(suggestions, current_count, estimated_new_count),
+                    "modifications": []  # Empty modifications to prevent search triggering
+                })
+            else:
+                print(f"⚠️ Query relaxation failed: {relaxation_result.get('error', 'Unknown error')}")
+                
+                # Use fallback suggestions
+                fallback_suggestions = self._generate_fallback_relaxation_suggestions(session_state)
+                
+                return self.create_content({
+                    "success": True,  # Still successful with fallback
+                    "type": "refinement_response",
+                    "refinement_type": "query_relaxation",
+                    "method": "rule_based_fallback",
+                    "relaxation_suggestions": fallback_suggestions,
+                    "error": relaxation_result.get("error", "API unavailable"),
+                    "message": "I generated some general relaxation suggestions based on your current filters. API-based suggestions are currently unavailable.",
+                    "session_state": session_state,
+                    "trigger_search": False,
+                    "modifications": []
+                })
+                    
         except Exception as e:
             print(f"❌ Query relaxation error: {e}")
-            return self.create_content({
-                "success": False,
-                "type": "refinement_response",  # FIXED: Add response type
-                "refinement_type": "query_relaxation", 
-                "error": f"Query relaxation failed: {str(e)}",
-                "modifications": []  # Empty modifications
-            })
+            import traceback
+            traceback.print_exc()
+            
+            # Generate fallback suggestions even on exception
+            try:
+                fallback_suggestions = self._generate_fallback_relaxation_suggestions(session_state)
+                return self.create_content({
+                    "success": True,
+                    "type": "refinement_response",
+                    "refinement_type": "query_relaxation",
+                    "method": "rule_based_fallback",
+                    "relaxation_suggestions": fallback_suggestions,
+                    "error": f"Query relaxation failed: {str(e)}",
+                    "message": "I generated some basic suggestions to help broaden your search.",
+                    "modifications": []
+                })
+            except:
+                return self.create_content({
+                    "success": False,
+                    "type": "refinement_response",
+                    "refinement_type": "query_relaxation",
+                    "error": f"Query relaxation failed: {str(e)}",
+                    "modifications": []
+                })
 
-    
     async def _handle_auto_refinement(self, user_input: str, session_state: Dict[str, Any],
                                     memory_context: List[Dict[str, Any]], session_id: str, 
                                     user_id: str) -> Content:
@@ -235,8 +311,17 @@ class RefinementAgent(BaseResDexAgent):
         try:
             print(f"🔍 AUTO-REFINEMENT: '{user_input}'")
             
-            # Default to facet generation if we have search results
-            return await self._handle_facet_generation(user_input, session_state, memory_context, session_id, user_id)
+            # Check current results to determine best refinement type
+            current_results = session_state.get('total_results', 0)
+            
+            # If few results, suggest relaxation
+            if current_results < 50:
+                print(f"🔄 Auto-routing to query relaxation (low results: {current_results})")
+                return await self._handle_query_relaxation(user_input, session_state, memory_context, session_id, user_id)
+            else:
+                # If sufficient results, offer facets for exploration
+                print(f"🔍 Auto-routing to facet generation (sufficient results: {current_results})")
+                return await self._handle_facet_generation(user_input, session_state, memory_context, session_id, user_id)
                 
         except Exception as e:
             return self.create_content({
@@ -244,8 +329,137 @@ class RefinementAgent(BaseResDexAgent):
                 "error": f"Auto-refinement failed: {str(e)}"
             })
     
+    def _generate_fallback_relaxation_suggestions(self, session_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Generate fallback relaxation suggestions when API is unavailable."""
+        suggestions = []
+        
+        # Check current filters and suggest relaxations
+        keywords = session_state.get('keywords', [])
+        min_exp = session_state.get('min_exp', 0)
+        max_exp = session_state.get('max_exp', 10)
+        min_salary = session_state.get('min_salary', 0)
+        max_salary = session_state.get('max_salary', 15)
+        current_cities = session_state.get('current_cities', [])
+        preferred_cities = session_state.get('preferred_cities', [])
+        
+        # Skill relaxation
+        if len(keywords) > 3:
+            suggestions.append({
+                'type': 'skill_relaxation',
+                'title': 'Reduce Required Skills',
+                'description': f'You have {len(keywords)} skills. Consider making some optional.',
+                'impact': 'Could significantly increase results',
+                'action': 'Make 2-3 skills optional instead of mandatory',
+                'confidence': 0.8
+            })
+        
+        # Experience relaxation
+        if min_exp > 0:
+            new_min = max(0, min_exp - 2)
+            suggestions.append({
+                'type': 'experience_relaxation',
+                'title': 'Lower Minimum Experience',
+                'description': f'Consider candidates with {new_min}+ years experience',
+                'impact': 'Could increase junior talent pool',
+                'action': f'Reduce minimum from {min_exp} to {new_min} years',
+                'confidence': 0.85
+            })
+        
+        if max_exp < 15:
+            new_max = min(20, max_exp + 3)
+            suggestions.append({
+                'type': 'experience_expansion',
+                'title': 'Expand Maximum Experience',
+                'description': f'Consider senior candidates up to {new_max} years',
+                'impact': 'Could include senior professionals',
+                'action': f'Increase maximum from {max_exp} to {new_max} years',
+                'confidence': 0.75
+            })
+        
+        # Salary relaxation
+        if max_salary < 25:
+            new_max_salary = min(30, max_salary + 5)
+            suggestions.append({
+                'type': 'salary_relaxation',
+                'title': 'Increase Salary Range',
+                'description': f'Consider expanding salary up to {new_max_salary} lakhs',
+                'impact': 'Could attract premium candidates',
+                'action': f'Increase from {max_salary} to {new_max_salary} lakhs',
+                'confidence': 0.7
+            })
+        
+        # Location relaxation
+        total_cities = len(current_cities) + len(preferred_cities)
+        if total_cities > 0 and total_cities < 5:
+            suggestions.append({
+                'type': 'location_relaxation',
+                'title': 'Add More Locations',
+                'description': 'Consider candidates from additional cities',
+                'impact': 'Could expand geographical talent pool',
+                'action': 'Add 2-3 more metro cities or enable remote work',
+                'confidence': 0.75
+            })
+        
+        # Remote work suggestion
+        suggestions.append({
+            'type': 'remote_work',
+            'title': 'Enable Remote Work',
+            'description': 'Consider candidates open to remote work',
+            'impact': 'Could significantly expand talent pool',
+            'action': 'Add remote work as location option',
+            'confidence': 0.9
+        })
+        
+        return suggestions[:4]  # Return top 4 suggestions
+    
+    def _create_user_friendly_relaxation(self, suggestions: List[Dict[str, Any]], 
+                                       current_count: int, estimated_new_count: int) -> Dict[str, Any]:
+        """Create user-friendly relaxation display data."""
+        try:
+            user_friendly = {
+                "total_suggestions": len(suggestions),
+                "current_candidate_count": current_count,
+                "estimated_increase": estimated_new_count,
+                "suggestions_by_type": {},
+                "top_impact_suggestions": [],
+                "summary": {}
+            }
+            
+            # Group suggestions by type
+            for suggestion in suggestions:
+                suggestion_type = suggestion.get('type', 'general')
+                if suggestion_type not in user_friendly["suggestions_by_type"]:
+                    user_friendly["suggestions_by_type"][suggestion_type] = []
+                user_friendly["suggestions_by_type"][suggestion_type].append(suggestion)
+            
+            # Find high-impact suggestions
+            for suggestion in suggestions:
+                confidence = suggestion.get('confidence', 0.5)
+                if confidence >= 0.8:
+                    user_friendly["top_impact_suggestions"].append(suggestion)
+            
+            # Create summary
+            if estimated_new_count > 0:
+                user_friendly["summary"] = {
+                    "potential_increase": f"+{estimated_new_count:,} candidates",
+                    "total_after_relaxation": f"~{current_count + estimated_new_count:,} candidates",
+                    "improvement_percentage": f"{int((estimated_new_count / max(current_count, 1)) * 100)}% increase"
+                }
+            else:
+                user_friendly["summary"] = {
+                    "potential_increase": "Significant increase expected",
+                    "total_after_relaxation": "Substantially more candidates",
+                    "improvement_percentage": "Notable improvement"
+                }
+            
+            return user_friendly
+            
+        except Exception as e:
+            logger.error(f"Error creating user-friendly relaxation display: {e}")
+            return {"total_suggestions": len(suggestions), "current_candidate_count": current_count}
+    
     def _format_facets_response(self, facets_data: Dict[str, Any], user_input: str) -> str:
-        """Format facets data into user-friendly message - SIMPLIFIED."""
+        """Format facets data into user-friendly message."""
         try:
             if not facets_data:
                 return "No facet categories could be generated for your current search criteria."
@@ -295,34 +509,12 @@ class RefinementAgent(BaseResDexAgent):
             logger.error(f"Error creating user-friendly facets: {e}")
             return {"primary_facets": {}, "secondary_facets": {}, "total_categories": 0}
     
-    def _generate_relaxation_suggestions(self, session_state: Dict[str, Any]) -> List[str]:
-        """Generate query relaxation suggestions (placeholder)."""
-        suggestions = []
-        
-        # Check current filters and suggest relaxations
-        if session_state.get("min_exp", 0) > 0:
-            suggestions.append("reduce minimum experience requirement")
-        
-        if session_state.get("max_exp", 50) < 20:
-            suggestions.append("increase maximum experience range")
-        
-        if len(session_state.get("keywords", [])) > 3:
-            suggestions.append("reduce number of required skills")
-        
-        if session_state.get("preferred_cities"):
-            suggestions.append("consider candidates from additional locations")
-        
-        if not suggestions:
-            suggestions = ["broaden location criteria", "reduce skill requirements", "expand experience range"]
-        
-        return suggestions[:3]  # Return top 3 suggestions
-    
     def extract_memory_search_terms(self, content: Content) -> str:
         """Extract search terms for memory context - refinement agent specific."""
         user_input = content.data.get("user_input", "")
         
         # Focus on refinement-related terms
-        refinement_keywords = ["facet", "category", "refine", "drill", "relax", "broaden"]
+        refinement_keywords = ["facet", "category", "refine", "drill", "relax", "broaden", "more results"]
         words = user_input.lower().split()
         
         # Extract refinement type and target
