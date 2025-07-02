@@ -63,32 +63,36 @@ class StreamlitApp:
     def _initialize_session_state_with_memory(self):
         """Initialize Streamlit session state with memory support."""
         defaults = {
-            'chat_history': [],
-            'candidates': [],
-            'search_applied': False,
-            'total_results': 0,
-            'page': 0,
-            'keywords': [],
-            'selected_keywords': [],
-            'current_cities': [],
-            'preferred_cities': [],
-            'active_days': "1 month",
-            'min_exp': 0.0,
-            'max_exp': 10.0,
-            'min_salary': 0.0,
-            'max_salary': 15.0,
-            'recruiter_company': "",
-            'agent_debug_info': {},
-            # Enhanced session state
-            'all_candidates': [],
-            'displayed_candidates': [],
-            'display_batch_size': 20,
-            # NEW: Memory-related session state
-            'user_id': f"user_{uuid.uuid4().hex[:8]}",
-            'conversation_session_id': str(uuid.uuid4()),
-            'memory_enabled': True,
-            'memory_stats': {}
-        }
+        'chat_history': [],
+        'candidates': [],
+        'search_applied': False,
+        'total_results': 0,
+        'page': 0,
+        'keywords': [],
+        'selected_keywords': [],
+        'current_cities': [],
+        'preferred_cities': [],
+        'active_days': "1 month",
+        'min_exp': 0.0,
+        'max_exp': 10.0,
+        'min_salary': 0.0,
+        'max_salary': 15.0,
+        'recruiter_company': "",
+        'agent_debug_info': {},
+        # Enhanced session state
+        'all_candidates': [],
+        'displayed_candidates': [],
+        'display_batch_size': 20,
+        # Memory-related session state
+        'user_id': f"user_{uuid.uuid4().hex[:8]}",
+        'conversation_session_id': str(uuid.uuid4()),
+        'memory_enabled': True,
+        'memory_stats': {},
+        # NEW: Facet-related session state
+        'facets_available': False,
+        'current_facets': {},
+        'facet_interaction_count': 0
+    }
         
         for key, default_value in defaults.items():
             if key not in st.session_state:
@@ -337,6 +341,15 @@ class StreamlitApp:
                 # After search: Show the memory-enhanced chat interface
                 if st.session_state['candidates']:
                     self.chat_interface.render()
+                    
+                    # NEW: Add facet generation quick action
+                    st.markdown("---")
+                    st.markdown("#### 🔍 **Quick Refinement**")
+                    
+                    if st.button("✨ Generate Facets", help="Generate interactive facets for current search"):
+                        session_id = str(uuid.uuid4())
+                        asyncio.run(self._generate_facets_for_current_search(session_id))
+                    
                 else:
                     st.markdown("### 🤖 AI Assistant with Memory")
                     st.warning("No candidates found with current criteria.")
@@ -398,6 +411,67 @@ class StreamlitApp:
         }
         
         return api_client.build_search_request(current_state)
+    def _get_clean_session_state_for_facets(self) -> Dict[str, Any]:
+        """Get clean session state for facet generation."""
+        return {
+            'keywords': st.session_state.get('keywords', []),
+            'min_exp': st.session_state.get('min_exp', 0),
+            'max_exp': st.session_state.get('max_exp', 10),
+            'min_salary': st.session_state.get('min_salary', 0),
+            'max_salary': st.session_state.get('max_salary', 15),
+            'current_cities': st.session_state.get('current_cities', []),
+            'preferred_cities': st.session_state.get('preferred_cities', []),
+            'recruiter_company': st.session_state.get('recruiter_company', ''),
+            'total_results': st.session_state.get('total_results', 0)
+        }
+
+    async def _generate_facets_for_current_search(self, session_id: str):
+        """Generate facets for the current search criteria."""
+        try:
+            # Get current session state
+            current_state = self._get_clean_session_state_for_facets()
+            
+            # Create facet generation request
+            from resdex_agent.agent import Content
+            content = Content(data={
+                "user_input": "generate facets for my current search",
+                "session_state": current_state,
+                "session_id": session_id,
+                "user_id": st.session_state['user_id']
+            })
+            
+            with st.spinner("🎨 Generating interactive facets..."):
+                result = await self.root_agent.execute(content)
+                
+                if result.data.get("success") and result.data.get("facets_data"):
+                    # Store facets for display
+                    st.session_state['current_facets'] = result.data["facets_data"]
+                    st.session_state['facets_available'] = True
+                    st.session_state['facet_interaction_count'] += 1
+                    
+                    # Add success message to chat
+                    facet_message = "🎨 **Interactive facets generated!** Click any facet item below to add it to your search filters and refine your results."
+                    st.session_state['chat_history'].append({
+                        "role": "assistant",
+                        "content": facet_message
+                    })
+                    
+                    st.success("✨ Interactive facets generated! Scroll down to see them.")
+                    
+                else:
+                    error_msg = result.data.get("error", "Facet generation failed")
+                    st.error(f"❌ {error_msg}")
+                    
+                    # Add error to chat
+                    st.session_state['chat_history'].append({
+                        "role": "assistant",
+                        "content": f"❌ Sorry, I couldn't generate facets: {error_msg}"
+                    })
+            
+            st.experimental_rerun()
+            
+        except Exception as e:
+            st.error(f"❌ Facet generation failed: {str(e)}")
 
     def _render_search_stats(self):
         """Render quick search statistics."""
@@ -596,7 +670,7 @@ class StreamlitApp:
             }
     
     def _get_custom_css(self) -> str:
-        """Get custom CSS for the application with memory enhancements."""
+        """Get custom CSS for the application with memory and facet enhancements."""
         return """
         <style>
         .stApp {
@@ -656,6 +730,34 @@ class StreamlitApp:
             background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
         }
         
+        /* NEW: Facet styling */
+        .facet-container {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 8px 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid #dee2e6;
+        }
+        
+        .facet-category {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        .facet-item-button {
+            transition: all 0.2s ease;
+            margin: 4px 2px;
+        }
+        
+        .facet-item-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
         /* Hide Streamlit menu and footer */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
@@ -675,6 +777,22 @@ class StreamlitApp:
         
         .step-container {
             animation: fadeInUp 0.3s ease-out;
+        }
+        
+        /* Facet animations */
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .facet-container {
+            animation: slideInRight 0.4s ease-out;
         }
         </style>
         """

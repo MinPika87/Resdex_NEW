@@ -139,6 +139,69 @@ class StepLogger:
     def log_error(self, error: str):
         """Log error occurrence."""
         self.log_step(f"❌ Error: {error}", "error")
+    def log_facet_generation(self, query: str, categories_count: int = 0):
+        """Log facet generation request."""
+        if categories_count > 0:
+            self.log_step(f"🔍 Generated {categories_count} facet categories for: '{query[:50]}...'", "facets")
+        else:
+            self.log_step(f"🔍 Generating facets for: '{query[:50]}...'", "facets")
+
+    def log_query_relaxation(self, suggestions_count: int = 0):
+        """Log query relaxation suggestions."""
+        if suggestions_count > 0:
+            self.log_step(f"🔄 Generated {suggestions_count} query relaxation suggestions", "relaxation")
+        else:
+            self.log_step(f"🔄 Analyzing query for relaxation opportunities", "relaxation")
+
+    def log_refinement_api_call(self, api_url: str, status: str = "calling"):
+        """Log refinement API calls."""
+        if status == "calling":
+            self.log_step(f"📡 Calling facet generation API", "api")
+        elif status == "success":
+            self.log_step(f"✅ Facet API call successful", "api")
+        elif status == "failed":
+            self.log_step(f"❌ Facet API call failed", "api")
+
+    def log_refinement_routing(self, refinement_type: str):
+        """Log refinement agent routing decisions."""
+        type_mapping = {
+            "facet_generation": "🔍 Facet Generation",
+            "query_relaxation": "🔄 Query Relaxation",
+            "auto_refinement": "🤖 Auto Refinement"
+        }
+        
+        display_type = type_mapping.get(refinement_type, refinement_type)
+        self.log_step(f"🎯 Refinement routing: {display_type}", "routing")
+
+    def log_facet_processing(self, result_1_count: int, result_2_count: int):
+        """Log facet processing results."""
+        total_categories = result_1_count + result_2_count
+        self.log_step(f"🔧 Processed facets: {result_1_count} primary + {result_2_count} secondary = {total_categories} total", "processing")
+
+    def log_refinement_completion(self, refinement_type: str, success: bool = True):
+        """Log completion of refinement processing."""
+        if success:
+            type_mapping = {
+                "facet_generation": "Facet generation completed",
+                "query_relaxation": "Query relaxation completed",
+                "auto_refinement": "Auto refinement completed"
+            }
+            
+            message = type_mapping.get(refinement_type, f"{refinement_type} completed")
+            self.log_step(f"🎯 {message}", "completion")
+        else:
+            self.log_step(f"❌ Refinement failed: {refinement_type}", "error")
+
+    def log_auto_trigger(self, trigger_type: str, condition: str):
+        """Log auto-trigger events for refinement."""
+        trigger_mapping = {
+            "facet_auto": "🤖 Auto-triggering facet generation",
+            "relaxation_auto": "🤖 Auto-triggering query relaxation",
+            "refinement_suggested": "💡 Refinement suggested"
+        }
+        
+        display_message = trigger_mapping.get(trigger_type, f"Auto-trigger: {trigger_type}")
+        self.log_step(f"{display_message}: {condition}", "auto_trigger")
     
     def log_processing_time(self, operation: str, start_time: float):
         """Log processing time for an operation."""
