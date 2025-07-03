@@ -1,0 +1,25 @@
+# Manager Specified Queries - 20 Total
+
+# TYPE 1: Single Tool, No Memory (10 queries)
+add python and java
+increase experience by 5 years
+add bangalore location
+set salary range 10-20 lpa
+add similar skills to java
+similar titles to software engineer
+nearby locations to mumbai
+relax my query
+similar titles for Designers
+refine my query
+
+# TYPE 3: Multi Tool, No Memory (10 queries)
+find similar skills to python and set experience 5+ years
+similar titles to data scientist from nearby to bangalore
+expand skills to java and add nearby cities to mumbai
+find titles similar to software engineer and add relevant skills, from nearby noida
+get titles similar to frontend developer and set salary 8-15 lpa
+find similar titles to software engineer from nearby Chennai and increase experience by 5 years
+expand python skills and add 3+ years experience
+find nearby locations to goa and add devops skills, and refine my query
+get related skills to machine learning from nearby locations to bangalore and relax my query
+find similar roles to product manager and set experience 5-10 years

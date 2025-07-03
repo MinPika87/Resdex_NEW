@@ -1,0 +1,39 @@
+================================================================================
+MANAGER SPECIFIED TEST RESULTS - 20 QUERIES
+================================================================================
+
+TYPE 1: SINGLE TOOL + NO MEMORY:
+  Total Cases: 10
+  Passed Cases: 10
+  Failed Cases: 0
+  Total Time: 331.306s
+  Average Time: 36.812s
+  Success Rate: 100.0%
+
+TYPE 3: MULTI TOOL + NO MEMORY:
+  Total Cases: 10
+  Passed Cases: 9
+  Failed Cases: 0
+  Total Time: 721.375s
+  Average Time: 80.153s
+  Success Rate: 100.0%
+
+OVERALL SUMMARY (20 QUERIES):
+Total Cases: 20
+Passed Cases: 19
+Failed Cases: 1
+Total Time: 1198.197s
+Average Time: 59.910s
+Overall Success Rate: 95.0%
+
+FAILED TEST DETAILS:
+========================================
+
+Failed Test 1:
+Query: find similar titles to software engineer from nearby Chennai and increase experience by 5 years
+Type: Unknown Type
+Agent: unknown
+Processing Time: 120.402s
+Confidence: 0.400
+Reasoning: FAIL: 2/5 components matched (score: 0.40). Differences: Keywords: expected [], got ['Senior Software Engineer', 'Software Developer', 'Senior Software Developer', 'Software Development Engineer 2', 'Software Engineer 2', 'Spring Boot', 'Java']; Experience: expected 0-10, got 0.0-15.0
+----------------------------------------
