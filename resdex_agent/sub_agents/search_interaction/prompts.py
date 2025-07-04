@@ -23,7 +23,8 @@ class SearchInteractionPrompts:
 - Experience: {current_filters.get('min_exp', 0)}-{current_filters.get('max_exp', 10)} years
 - Salary: {current_filters.get('min_salary', 0)}-{current_filters.get('max_salary', 15)} lakhs
 - Current Cities: {current_filters.get('current_cities', [])}
-- Preferred Cities: {current_filters.get('preferred_cities', [])}"""
+- Preferred Cities: {current_filters.get('preferred_cities', [])}
+- Target Companies: {current_filters.get('target_companies', [])}"""
         
         return f"""You are a search filter assistant with memory awareness. Extract filter modifications from user requests.
 
@@ -41,14 +42,27 @@ For multiple actions: return array of objects
 
 RESPONSE FORMAT:
 {{
-    "action": "add_skill|remove_skill|modify_experience|modify_salary|add_location|remove_location",
-    "filter_type": "keywords|experience|salary|location", 
+    "action": "add_skill|remove_skill|modify_experience|modify_salary|add_location|remove_location|add_target_company|remove_target_company",
+    "filter_type": "keywords|experience|salary|location|target_companies", 
     "operation": "add|remove|set|set_range|increase|decrease",
     "value": "extracted_value",
     "mandatory": true/false,
     "response_text": "human_readable_explanation",
     "trigger_search": true/false
 }}
+TARGET COMPANY ACTIONS:
+- "add Amazon filter" → {{"action": "add_target_company", "value": "Amazon", "trigger_search": false}}
+- "remove Google company" → {{"action": "remove_target_company", "value": "Google", "trigger_search": false}}
+- "add Microsoft target company" → {{"action": "add_target_company", "value": "Microsoft", "trigger_search": false}}
+- "filter by TCS" → {{"action": "add_target_company", "value": "TCS", "trigger_search": true}}
+
+COMPANY DETECTION PATTERNS:
+- "add [COMPANY] filter" → add_target_company
+- "remove [COMPANY] filter" → remove_target_company  
+- "add [COMPANY] company" → add_target_company
+- "remove [COMPANY] company" → remove_target_company
+- "filter by [COMPANY]" → add_target_company + trigger_search
+- "exclude [COMPANY]" → remove_target_company
 
 MANDATORY DETECTION:
 - mandatory=true for: "mandatory", "important", "must have", "required", "essential"
@@ -62,7 +76,10 @@ EXAMPLES:
 "add python" → {{"action": "add_skill", "value": "Python", "mandatory": false, "trigger_search": false}}
 "search with java" → {{"action": "add_skill", "value": "Java", "mandatory": false, "trigger_search": true}}
 "set experience 5-10 years" → {{"action": "modify_experience", "operation": "set_range", "value": "5-10", "trigger_search": false}}
-
+"add Amazon filter" → {{"action": "add_target_company", "value": "Amazon", "mandatory": false, "trigger_search": false}}
+"filter by Google" → {{"action": "add_target_company", "value": "Google", "mandatory": false, "trigger_search": true}}
+"remove Microsoft company" → {{"action": "remove_target_company", "value": "Microsoft", "mandatory": false, "trigger_search": false}}
+"set experience 5-10 years" → {{"action": "modify_experience", "operation": "set_range", "value": "5-10", "trigger_search": false}}
 Return ONLY the JSON response."""
     
     @staticmethod

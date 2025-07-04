@@ -53,14 +53,15 @@ class ExpansionAgent(BaseResDexAgent):
             from ...tools.matrix_expansion_tool import MatrixExpansionTool
             self.tools["matrix_expansion"] = MatrixExpansionTool("matrix_expansion_tool")
             
-            # NEW: Matrix-based location expansion tool
+            # Location expansion tool (unchanged)
             from ...tools.location_expansion_tool import MatrixLocationExpansionTool
-            self.tools["matrix_location"] = MatrixLocationExpansionTool("matrix_location_expansion_tool")
-            
+            self.tools["location_tool"] = MatrixLocationExpansionTool("location_expansion_tool")
+            from ...tools.company_expansion_tool import CompanyExpansionTool
+            self.tools["company_expansion"] = CompanyExpansionTool("company_expansion_tool")
             # Filter tool for applying expanded results
             from ...tools.filter_tools import FilterTool
             self.tools["filter_tool"] = FilterTool("expansion_filter_tool")
-            
+               
             print(f"🔧 Enhanced ExpansionAgent tools: {list(self.tools.keys())}")
             
             # Check matrix availability
@@ -69,19 +70,19 @@ class ExpansionAgent(BaseResDexAgent):
                 print("✅ Matrix Features system available - using as primary expansion method")
             else:
                 print("⚠️ Matrix Features not available - will use LLM fallback only")
-                
-            # Check matrix location availability
-            location_stats = self.tools["matrix_location"].get_matrix_stats()
+            #check matrix availability check for locations
+            location_stats = self.tools["location_tool"].get_matrix_stats()
             if location_stats.get("available", False):
                 print("✅ Matrix Location system available - using as primary location method")
             else:
                 print("⚠️ Matrix Location system not available - will use LLM fallback only")
+            # Check company expansion tool
+            company_stats = self.tools["company_expansion"].get_tool_stats()
+            print(f"✅ Company expansion tool loaded: {company_stats['predefined_groups']} groups, CSV: {company_stats['csv_status']['loaded']}")
             
         except Exception as e:
             logger.error(f"Failed to setup enhanced expansion tools: {e}")
             print(f"❌ Enhanced expansion tools setup failed: {e}")
-            import traceback
-            traceback.print_exc()
     
     async def execute_core(self, content: Content, memory_context: List[Dict[str, Any]], 
                           session_id: str, user_id: str) -> Content:
@@ -105,6 +106,12 @@ class ExpansionAgent(BaseResDexAgent):
                 return await self._handle_matrix_title_expansion(user_input, session_state, memory_context, session_id, user_id)
             elif expansion_type == "location_expansion":
                 return await self._handle_location_expansion(user_input, session_state, memory_context, session_id, user_id)
+            elif expansion_type == "company_expansion":
+                return await self._handle_company_expansion(user_input, session_state, memory_context, session_id, user_id)
+            elif expansion_type == "company_group":
+                return await self._handle_company_group_expansion(user_input, session_state, memory_context, session_id, user_id)
+            elif expansion_type == "recruiter_similar":
+                return await self._handle_recruiter_similar_expansion(user_input, session_state, memory_context, session_id, user_id)
             elif expansion_type == "multi_expansion":
                 return await self._handle_multi_expansion(user_input, session_state, memory_context, session_id, user_id)
             else:
@@ -125,7 +132,9 @@ class ExpansionAgent(BaseResDexAgent):
         # Check intent data first
         if intent_data.get("expansion_type"):
             return intent_data["expansion_type"]
-        
+        intent_type = intent_data.get("intent_type", "")
+        if intent_type in ["company_expansion", "company_group", "recruiter_similar"]:
+            return intent_type
         # Enhanced skill expansion indicators
         skill_indicators = [
             "similar skills", "related skills", "skill expansion", "expand skills",
@@ -149,15 +158,38 @@ class ExpansionAgent(BaseResDexAgent):
             "nearby cities", "similar cities", "around", "close to", "near", "locations near",
             "cities near", "locations similar to", "cities similar to"
         ]
+        company_expansion_indicators = [
+            "similar companies", "companies like", "companies similar to", "expand companies",
+            "company expansion", "add companies like", "find companies similar"
+        ]
         
+        company_group_indicators = [
+            "big4", "big5", "mbb", "faang", "manga", "top companies", "top it", 
+            "top banks", "top consulting", "top finance", "consulting companies",
+            "analyst firms", "core engineering", "automotive companies", "pharma companies",
+            "fintech", "edtech", "foodtech", "unicorns"
+        ]
+        
+        recruiter_similar_indicators = [
+            "similar to my company", "companies like mine", "similar to recruiter company",
+            "my company similar", "add similar companies to my company"
+        ]
         has_skill = any(indicator in input_lower for indicator in skill_indicators)
         has_title = any(indicator in input_lower for indicator in title_indicators)
         has_location = any(indicator in input_lower for indicator in location_indicators)
-        
+        has_company_expansion = any(indicator in input_lower for indicator in company_expansion_indicators)
+        has_company_group = any(indicator in input_lower for indicator in company_group_indicators)
+        has_recruiter_similar = any(indicator in input_lower for indicator in recruiter_similar_indicators)
         # Multi-expansion check
-        expansion_count = sum([has_skill, has_title, has_location])
+        expansion_count = sum([has_skill, has_title, has_location, has_company_expansion,has_company_group,has_recruiter_similar])
         if expansion_count > 1:
             return "multi_expansion"
+        elif has_company_expansion:
+            return "company_expansion"
+        elif has_company_group:
+            return "company_group"
+        elif has_recruiter_similar:
+            return "recruiter_similar"
         elif has_skill:
             return "skill_expansion"
         elif has_title:
@@ -978,7 +1010,7 @@ class ExpansionAgent(BaseResDexAgent):
             print(f"📝 Base location identified: {base_location}")
             
             # Try matrix expansion first
-            matrix_result = await self.tools["matrix_location"](
+            matrix_result = await self.tools["location_tool"](
                 base_location=base_location,
                 radius_km=50.0,  # Default radius
                 max_results=5
@@ -1092,6 +1124,19 @@ class ExpansionAgent(BaseResDexAgent):
                 if location_result.data.get("success"):
                     all_modifications.extend(location_result.data.get("modifications", []))
                     expansion_results.append(f"Locations: {location_result.data.get('message', '')}")
+            if any(indicator in input_lower for indicator in ["companies", "company", "similar companies", "big4", "faang"]):
+                # Try to determine which type of company expansion
+                if any(indicator in input_lower for indicator in ["big4", "big5", "mbb", "faang", "top"]):
+                    company_result = await self._handle_company_group_expansion(user_input, session_state, memory_context, session_id, user_id)
+                elif any(indicator in input_lower for indicator in ["my company", "mine", "recruiter"]):
+                    company_result = await self._handle_recruiter_similar_expansion(user_input, session_state, memory_context, session_id, user_id)
+                else:
+                    company_result = await self._handle_company_expansion(user_input, session_state, memory_context, session_id, user_id)
+                
+                if company_result.data.get("success"):
+                    all_modifications.extend(company_result.data.get("modifications", []))
+                    method = company_result.data.get("method", "unknown")
+                    expansion_results.append(f"Companies ({method}): {company_result.data.get('message', '')}")
             
             combined_message = " | ".join(expansion_results) if expansion_results else "Multi-expansion completed"
             
@@ -1506,7 +1551,233 @@ Return ONLY JSON:
             "expanded_titles": mapping["titles"][:self.config.max_titles_expansion],
             "suggested_skills": mapping["skills"][:5]
         }
-    
+    async def _handle_company_expansion(self, user_input: str, session_state: Dict[str, Any],
+                                  memory_context: List[Dict[str, Any]], session_id: str, 
+                                  user_id: str) -> Content:
+        """Handle company expansion requests."""
+        try:
+            print(f"🏢 COMPANY EXPANSION: Processing '{user_input}'")
+            
+            # Extract company name from input
+            company_name = self._extract_company_name(user_input)
+            
+            if not company_name:
+                return self.create_content({
+                    "success": False,
+                    "error": "No company name found for expansion",
+                    "message": "Please specify a company name (e.g., 'add similar companies to Google')"
+                })
+            
+            print(f"🔍 Extracted company name: {company_name}")
+            
+            result = await self.tools["company_expansion"](
+                expansion_type="similar_companies",
+                company_name=company_name
+            )
+            
+            if result["success"]:
+                return await self._apply_company_expansion_results(result, session_state)
+            else:
+                return self.create_content(result)
+                
+        except Exception as e:
+            return self.create_content({
+                "success": False,
+                "error": f"Company expansion failed: {str(e)}"
+            })
+
+    async def _handle_company_group_expansion(self, user_input: str, session_state: Dict[str, Any],
+                                            memory_context: List[Dict[str, Any]], session_id: str, 
+                                            user_id: str) -> Content:
+        """Handle company group expansion (Big4, FAANG, etc.)."""
+        try:
+            print(f"🏢 COMPANY GROUP EXPANSION: Processing '{user_input}'")
+            
+            # Extract group name from input
+            group_name = self._extract_group_name(user_input)
+            
+            if not group_name:
+                return self.create_content({
+                    "success": False,
+                    "error": "No company group found for expansion",
+                    "message": "Please specify a company group (e.g., 'add Big4 companies', 'add fintech companies')"
+                })
+            
+            print(f"🔍 Extracted group name: {group_name}")
+            
+            result = await self.tools["company_expansion"](
+                expansion_type="company_group",
+                group_name=group_name
+            )
+            
+            if result["success"]:
+                return await self._apply_company_expansion_results(result, session_state)
+            else:
+                return self.create_content(result)
+                
+        except Exception as e:
+            return self.create_content({
+                "success": False,
+                "error": f"Company group expansion failed: {str(e)}"
+            })
+
+    async def _handle_recruiter_similar_expansion(self, user_input: str, session_state: Dict[str, Any],
+                                            memory_context: List[Dict[str, Any]], session_id: str, 
+                                            user_id: str) -> Content:
+        """Handle expansion of companies similar to recruiter's company."""
+        try:
+            print(f"🏢 RECRUITER SIMILAR EXPANSION: Processing '{user_input}'")
+            
+            # Get recruiter company from session state
+            recruiter_company = session_state.get('recruiter_company', '').strip()
+            
+            if not recruiter_company:
+                return self.create_content({
+                    "success": False,
+                    "error": "No recruiter company found. Please set your company name first.",
+                    "message": "Please enter your company name in the search form before requesting similar companies."
+                })
+            
+            print(f"🏢 Using recruiter company: {recruiter_company}")
+            
+            result = await self.tools["company_expansion"](
+                expansion_type="recruiter_similar",
+                recruiter_company=recruiter_company
+            )
+            
+            if result["success"]:
+                return await self._apply_company_expansion_results(result, session_state)
+            else:
+                return self.create_content(result)
+                
+        except Exception as e:
+            return self.create_content({
+                "success": False,
+                "error": f"Recruiter similar expansion failed: {str(e)}"
+            })
+
+    async def _apply_company_expansion_results(self, result: Dict[str, Any], session_state: Dict[str, Any]) -> Content:
+        """Apply company expansion results to session state with method indication."""
+        try:
+            companies_to_add = result.get("companies", result.get("similar_companies", []))
+            method = result.get("method", "unknown")
+            
+            modifications = []
+            added_companies = []
+            
+            for company in companies_to_add:
+                if company not in session_state.get('target_companies', []):
+                    filter_result = await self.tools["filter_tool"](
+                        "add_target_company", session_state, company=company
+                    )
+                    if filter_result["success"]:
+                        modifications.extend(filter_result["modifications"])
+                        added_companies.append(company)
+            
+            expansion_type = result.get("expansion_type", "company_expansion")
+            count = len(added_companies)
+            
+            # Create method-aware message
+            method_text = ""
+            if method == "csv_lookup":
+                method_text = " (from company database)"
+            elif method == "llm_fallback":
+                method_text = " (AI-analyzed)"
+            elif method == "predefined_group":
+                method_text = " (curated list)"
+            elif method == "partial_match":
+                method_text = " (matched group)"
+            
+            if expansion_type == "company_group":
+                group_name = result.get("group_name", "group")
+                message = f"Added {count} companies from {group_name}{method_text}: {', '.join(added_companies[:3])}{'...' if count > 3 else ''}"
+            elif expansion_type == "recruiter_similar":
+                recruiter_company = result.get("recruiter_company", result.get("base_company", "company"))
+                industry_segment = result.get("industry_segment", "")
+                if industry_segment and method == "llm_fallback":
+                    message = f"Added {count} {industry_segment} companies similar to your company ({recruiter_company}){method_text}: {', '.join(added_companies[:3])}{'...' if count > 3 else ''}"
+                else:
+                    message = f"Added {count} companies similar to your company ({recruiter_company}){method_text}: {', '.join(added_companies[:3])}{'...' if count > 3 else ''}"
+            else:
+                base_company = result.get("base_company", "company")
+                industry_segment = result.get("industry_segment", "")
+                if industry_segment and method == "llm_fallback":
+                    message = f"Added {count} {industry_segment} companies similar to {base_company}{method_text}: {', '.join(added_companies[:3])}{'...' if count > 3 else ''}"
+                else:
+                    message = f"Added {count} companies similar to {base_company}{method_text}: {', '.join(added_companies[:3])}{'...' if count > 3 else ''}"
+            
+            # Add reasoning if available (from LLM)
+            reasoning = result.get("reasoning", "")
+            if reasoning and method == "llm_fallback":
+                message += f"\n\n💡 Analysis: {reasoning}"
+            
+            return self.create_content({
+                "success": True,
+                "expansion_type": expansion_type,
+                "method": method,
+                "modifications": modifications,
+                "session_state": session_state,
+                "message": message,
+                "companies_added": added_companies,
+                "industry_segment": result.get("industry_segment", ""),
+                "reasoning": reasoning,
+                "trigger_search": False
+            })
+            
+        except Exception as e:
+            return self.create_content({
+                "success": False,
+                "error": f"Failed to apply company expansion: {str(e)}"
+            })
+
+    def _extract_company_name(self, user_input: str) -> str:
+        """Extract company name from user input."""
+        input_lower = user_input.lower()
+        
+        # Company extraction patterns
+        company_patterns = [
+            r"similar companies to ([a-zA-Z\s&.-]+)",
+            r"companies (?:like|similar to) ([a-zA-Z\s&.-]+)",
+            r"add companies like ([a-zA-Z\s&.-]+)",
+            r"find companies similar to ([a-zA-Z\s&.-]+)",
+            r"expand ([a-zA-Z\s&.-]+) companies"
+        ]
+        
+        import re
+        for pattern in company_patterns:
+            match = re.search(pattern, input_lower)
+            if match:
+                company_name = match.group(1).strip()
+                # Clean up company name
+                company_name = company_name.replace(" and", "").replace(" or", "").strip()
+                if len(company_name) > 2:
+                    return company_name.title()
+        
+        return ""
+
+    def _extract_group_name(self, user_input: str) -> str:
+        """Extract company group name from user input."""
+        input_lower = user_input.lower()
+        
+        # Group extraction patterns
+        group_patterns = [
+            r"add ([a-zA-Z0-9\s]+) companies",
+            r"([a-zA-Z0-9\s]+) companies",
+            r"add ([a-zA-Z0-9\s]+)",
+            r"find ([a-zA-Z0-9\s]+) companies"
+        ]
+        
+        import re
+        for pattern in group_patterns:
+            match = re.search(pattern, input_lower)
+            if match:
+                group_name = match.group(1).strip()
+                # Skip common words
+                skip_words = ["similar", "companies", "add", "find", "get", "show", "list"]
+                if group_name not in skip_words and len(group_name) > 2:
+                    return group_name
+        
+        return ""
     def extract_memory_search_terms(self, content: Content) -> str:
         """Extract search terms for memory context - enhanced expansion agent specific."""
         user_input = content.data.get("user_input", "")

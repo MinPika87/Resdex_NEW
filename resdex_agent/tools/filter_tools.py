@@ -49,6 +49,10 @@ class FilterTool(Tool):
                 return await self._add_location(session_state, **kwargs)
             elif action == "remove_location":
                 return await self._remove_location(session_state, **kwargs)
+            elif action == "add_target_company":
+                return await self._add_target_company(session_state, **kwargs)
+            elif action == "remove_target_company":  
+                return await self._remove_target_company(session_state, **kwargs)
             else:
                 return {
                     "success": False,
@@ -315,4 +319,57 @@ class FilterTool(Tool):
                 "success": False,
                 "message": f"'{normalized_location}' was not found in location filters",
                 "modifications": []
-            }        
+            }  
+
+    async def _add_target_company(self, session_state: Dict[str, Any], company: str, **kwargs) -> Dict[str, Any]:
+        """Add a target company to search filters."""
+        target_companies = session_state.get('target_companies', [])
+        
+        if company not in target_companies:
+            target_companies.append(company)
+            session_state['target_companies'] = target_companies
+            
+            return {
+                "success": True,
+                "message": f"Added '{company}' to target companies",
+                "modifications": [{
+                    "type": "target_company_added",
+                    "field": "target_companies",
+                    "value": company
+                }]
+            }
+        else:
+            return {
+                "success": True,
+                "message": f"'{company}' is already in target companies",
+                "modifications": []
+            }
+    async def _remove_target_company(self, session_state: Dict[str, Any], company: str, **kwargs) -> Dict[str, Any]:
+        """Remove a target company from search filters."""
+        target_companies = session_state.get('target_companies', [])
+        
+        # Find and remove matching company (case-insensitive)
+        removed_company = None
+        for comp in target_companies[:]:
+            if company.lower() == comp.lower():
+                target_companies.remove(comp)
+                removed_company = comp
+                break
+        
+        if removed_company:
+            session_state['target_companies'] = target_companies
+            return {
+                "success": True,
+                "message": f"Removed '{removed_company}' from target companies",
+                "modifications": [{
+                    "type": ModificationType.TARGET_COMPANY_REMOVED.value,
+                    "field": "target_companies",
+                    "value": removed_company
+                }]
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"'{company}' was not found in target companies",
+                "modifications": []
+        }

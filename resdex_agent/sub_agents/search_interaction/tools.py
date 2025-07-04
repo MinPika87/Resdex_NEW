@@ -76,7 +76,7 @@ class IntentProcessor(Tool):
             filter_tool = FilterTool()
             
             # Apply the modification
-            if action in ["add_skill", "remove_skill", "modify_experience", "modify_salary", "add_location", "remove_location"]:
+            if action in ["add_skill", "remove_skill", "modify_experience", "modify_salary", "add_location", "remove_location","add_target_company","remove_target_company"]:
                 # Prepare parameters for FilterTool
                 filter_params = {}
                 
@@ -92,7 +92,17 @@ class IntentProcessor(Tool):
                     filter_params["skill"] = skill_value.strip()
                     if "mandatory" in intent_data:
                         filter_params["mandatory"] = intent_data.get("mandatory", False)
-                
+                elif action in ["add_target_company", "remove_target_company"]:  # NEW
+                    company_value = intent_data.get("value", "")
+                    if not company_value or company_value.strip() == "":
+                        return {
+                            "success": False,
+                            "error": f"No company specified for {action}",
+                            "modifications": [],
+                            "trigger_search": False
+                        }
+                    filter_params["company"] = company_value.strip()
+
                 elif action in ["modify_experience", "modify_salary"]:
                     filter_params["operation"] = intent_data.get("operation", "set")
                     value = intent_data.get("value", "")

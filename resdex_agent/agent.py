@@ -226,16 +226,18 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
                 
                 print(f"🎯 LLM SINGLE INTENT ROUTING: target_agent={target_agent}, intent_type={intent_type}")
                 
-                # FIXED: Route based on LLM analysis instead of keyword fallback
                 if target_agent == "search_interaction":
                     if session_id:
                         step_logger.log_step("🎯 Routing to SearchInteractionAgent (LLM Analysis)", "routing")
                     return await self._route_to_agent("search_interaction", content, session_id)
                 
                 elif target_agent == "expansion":
-                    if session_id:
-                        step_logger.log_step("🎯 Routing to ExpansionAgent (LLM Analysis)", "routing")
-                    return await self._route_to_agent("expansion", content, session_id)
+                    intent_type = first_intent.get("intent_type")
+                    if intent_type in ["skill_expansion", "title_expansion", "location_expansion", 
+                                    "company_expansion", "company_group", "recruiter_similar"]:
+                        if session_id:
+                            step_logger.log_step(f"🎯 Routing to ExpansionAgent ({intent_type})", "routing")
+                        return await self._route_to_agent("expansion", content, session_id)
                 
                 elif target_agent == "refinement":
                     if session_id:
@@ -300,8 +302,31 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
                 "nearby locations", "similar locations", "locations similar to", "locations like",
                 "nearby cities", "similar cities", "cities similar to", "cities like",
                 "expand locations", "find locations", "around", "close to", "near"
+
+            ]
+            company_expansion_indicators = [
+                "similar companies", "companies like", "companies similar to", "expand companies",
+                "company expansion", "add companies like", "find companies similar"
             ]
             
+            company_group_indicators = [
+                "big4", "big5", "mbb", "faang", "manga", "top companies", "top it", 
+                "top banks", "top consulting", "top finance", "consulting companies",
+                "analyst firms", "core engineering", "automotive companies", "pharma companies",
+                "fintech", "edtech", "foodtech", "unicorns"
+            ]
+            
+            recruiter_similar_indicators = [
+                "similar to my company", "companies like mine", "similar to recruiter company",
+                "my company similar", "add similar companies to my company"
+            ]
+            has_company_expansion = any(indicator in input_lower for indicator in company_expansion_indicators)
+            has_company_group = any(indicator in input_lower for indicator in company_group_indicators)
+            has_recruiter_similar = any(indicator in input_lower for indicator in recruiter_similar_indicators)
+            if has_company_expansion or has_company_group or has_recruiter_similar:
+                if session_id:
+                    step_logger.log_step("🏢 Routing to ExpansionAgent (Company Expansion - Fallback)", "routing")
+                return await self._route_to_agent("expansion", content, session_id)
             if any(indicator in input_lower for indicator in expansion_indicators):
                 if session_id:
                     step_logger.log_step("🎯 Routing to ExpansionAgent (Fallback)", "routing")
@@ -437,19 +462,25 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
     1. **Skill Expansion**: If user mentions "similar skills to X" or "related skills" → target_agent: "expansion"
     2. **Title Expansion**: If user mentions "similar titles to X" or "related titles/roles/positions" → target_agent: "expansion"  
     3. **Location Expansion**: If user mentions "nearby to X" or "similar locations" → target_agent: "expansion"
-    4. **Facet Generation**: If user mentions "facets", "categories", "drill down", "refine", "breakdown" → target_agent: "refinement"
-    5. **Query Relaxation**: If user mentions "relax", "broaden", "more results", "expand search", "not enough results", "too few candidates" → target_agent: "refinement"
-    6. **Filter Operations**: location/skills/Experience/salary modifications → target_agent: "search_interaction" without expansion filter
-    6.a. Send all filter operations at once to the search interaction agent. If the user enter multiple filter operations in the query, accumulate them and send at once to the search_interaction agent to proceed (means all filter operations (which are not expansion or refinement) are one intent)
-    7. **Search Execution**: Final search trigger → target_agent: "search_interaction"
-    8. **Expansion**: If the user mentions "similar skills/titles/locations to X and Y and .... then this is a single intent query
-    9. **Expansion**: If the user mentions "similar skills to X and similar titles to Y" then this is a multi intent query
-    10. **Expansion**: If the user mentions "similar skills to X, similar skills to Y" then this is a multi intent query
+    4.**For Company Expansion:**
+    - Company Similar: "similar companies to [COMPANY_NAME]" (e.g., "similar companies to Google")
+    - Company Groups: "add [GROUP_NAME] companies" (e.g., "add Big4 companies", "add fintech companies")
+    - Recruiter Similar: "add companies similar to my company" or "similar to recruiter company"
+    5. **Facet Generation**: If user mentions "facets", "categories", "drill down", "refine", "breakdown" → target_agent: "refinement"
+    6. **Query Relaxation**: If user mentions "relax", "broaden", "more results", "expand search", "not enough results", "too few candidates" → target_agent: "refinement"
+    5.a and 6.a Donot think much upon the raw entities for refinement agent, make them empty
+    7. **Filter Operations**: location/skills/Experience/salary/targetcompany modifications → target_agent: "search_interaction" without expansion filter
+    7.a. Send all filter operations at once to the search interaction agent. If the user enter multiple filter operations in the query, accumulate them and send at once to the search_interaction agent to proceed (means all filter operations (which are not expansion or refinement) are one intent)
+    8. **Search Execution**: Final search trigger → target_agent: "search_interaction"
+    9. **Expansion**: If the user mentions "similar skills/titles/locations to X and Y and .... then this is a single intent query
+    10. **Expansion**: If the user mentions "similar skills to X and similar titles to Y" then this is a multi intent query
+    11. **Expansion**: If the user mentions "similar skills to X, similar skills to Y" then this is a multi intent query
     INTELLIGENT QUERY FORMATTING:
     When creating extracted_query for expansion agent, ALWAYS format it properly:
     - For skills: "similar skills to [SKILL_NAME]" (e.g., "similar skills to Python")
     - For titles: "similar titles to [TITLE_NAME]" (e.g., "similar titles to Data Scientist")  
     - For locations: "nearby locations to [LOCATION_NAME]" (e.g., "nearby locations to Mumbai")
+    - For companies: "similar companies to [Company_NAME]" (e.g., "similar companies to Infosys")
 
     EXAMPLES OF INTELLIGENT FORMATTING:
     Input: "skills like Python and React"
@@ -484,6 +515,20 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
     - facet_generation: Generate categorical facets from search results
     - query_relaxation: Relax search constraints for more results
 
+    COMPANY EXPANSION INTENT DETECTION:
+    - "similar companies to X" → target_agent: "expansion", intent_type: "company_expansion" 
+    - "companies like X" → target_agent: "expansion", intent_type: "company_expansion"
+    - "companies similar to X" → target_agent: "expansion", intent_type: "company_expansion"
+    - "Big4", "Big5", "MBB", "FAANG", "top IT companies" → target_agent: "expansion", intent_type: "company_group"
+    - "add similar companies to my company" → target_agent: "expansion", intent_type: "recruiter_similar"
+    - "companies like mine" → target_agent: "expansion", intent_type: "recruiter_similar"
+
+    TARGET COMPANY FILTER OPERATIONS:
+    - "add Amazon filter" → target_agent: "search_interaction", intent_type: "filter_operation"
+    - "remove Google company" → target_agent: "search_interaction", intent_type: "filter_operation"
+    - "filter by TCS" → target_agent: "search_interaction", intent_type: "filter_operation"
+    - "exclude Microsoft" → target_agent: "search_interaction", intent_type: "filter_operation"
+
     Break down the query into individual intents:
     {{
         "is_multi_intent": true/false,
@@ -491,7 +536,7 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         "intents": [
             {{
                 "intent_id": 1,
-                "intent_type": "skill_expansion|title_expansion|location_expansion|facet_generation|query_relaxation|filter_operation|search_execution",
+                "intent_type": "skill_expansion|title_expansion|location_expansion|company_expansion|facet_generation|query_relaxation|filter_operation|search_execution",
                 "target_agent": "expansion|refinement|search_interaction",
                 "extracted_query": "PROPERLY FORMATTED QUERY FOR TARGET AGENT",
                 "raw_entities": ["extracted", "entities", "from", "input"],
@@ -755,6 +800,116 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
         ]
     }}
 
+    Input: "similar companies to Google"
+    Output: {{
+        "is_multi_intent": false,
+        "total_intents": 1,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "company_expansion",
+                "target_agent": "expansion",
+                "extracted_query": "similar companies to Google",
+                "raw_entities": ["Google"],
+                "execution_order": 1,
+                "description": "Find companies similar to Google"
+            }}
+        ]
+    }}
+
+    Input: "add Big4 companies"
+    Output: {{
+        "is_multi_intent": false,
+        "total_intents": 1,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "company_group",
+                "target_agent": "expansion",
+                "extracted_query": "add Big4 companies",
+                "raw_entities": ["Big4"],
+                "execution_order": 1,
+                "description": "Add Big4 consulting companies"
+            }}
+        ]
+    }}
+
+    Input: "add companies like mine"
+    Output: {{
+        "is_multi_intent": false,
+        "total_intents": 1,
+        "intents": [
+            {{
+                "intent_id": 1,
+                "intent_type": "recruiter_similar",
+                "target_agent": "expansion",
+                "extracted_query": "companies similar to recruiter company",
+                "raw_entities": ["mine"],
+                "execution_order": 1,
+                "description": "Find companies similar to recruiter's company"
+            }}
+        ]
+    }}
+    Input: "add Amazon filter"
+    Output: {{
+    "is_multi_intent": false,
+    "total_intents": 1,
+    "intents": [
+        {{
+            "intent_id": 1,
+            "intent_type": "filter_operation",
+            "target_agent": "search_interaction",
+            "extracted_query": "add Amazon as target company filter",
+            "raw_entities": ["Amazon"],
+            "execution_order": 1,
+            "description": "Add Amazon to target companies filter"
+        }}
+    ]
+}}
+
+Input: "filter by Google and TCS"
+Output: {{
+    "is_multi_intent": true,
+    "total_intents": 2,
+    "intents": [
+        {{
+            "intent_id": 1,
+            "intent_type": "filter_operation",
+            "target_agent": "search_interaction",
+            "extracted_query": "add Google as target company filter",
+            "raw_entities": ["Google"],
+            "execution_order": 1,
+            "description": "Add Google to target companies filter"
+        }},
+        {{
+            "intent_id": 2,
+            "intent_type": "filter_operation",
+            "target_agent": "search_interaction",
+            "extracted_query": "add TCS as target company filter",
+            "raw_entities": ["TCS"],
+            "execution_order": 2,
+            "description": "Add TCS to target companies filter"
+        }}
+    ]
+}}
+
+Input: "remove Microsoft company"
+Output: {{
+    "is_multi_intent": false,
+    "total_intents": 1,
+    "intents": [
+        {{
+            "intent_id": 1,
+            "intent_type": "filter_operation",
+            "target_agent": "search_interaction",
+            "extracted_query": "remove Microsoft from target companies",
+            "raw_entities": ["Microsoft"],
+            "execution_order": 1,
+            "description": "Remove Microsoft from target companies filter"
+        }}
+    ]
+}}
+
     Return ONLY the JSON response."""
 
         try:
@@ -887,9 +1042,14 @@ class ResDexRootAgent(BaseAgent, MemoryMixin if MEMORY_AVAILABLE else object):
                 return f"nearby locations to {entities_str}"
             else:
                 return extracted_query
+        elif intent_type == "company_expansion":
+            if raw_entities:
+                entities_str = " and ".join(raw_entities)
+                return f"similar companies to {entities_str}"
         
         # Default: return as-is
         return extracted_query
+    
     def _ensure_proper_refinement_format(self, extracted_query: str, intent_type: str, raw_entities: List[str]) -> str:
         """
         ENHANCED: Ensure the extracted query is in the proper format for refinement agent.

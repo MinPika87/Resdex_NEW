@@ -202,7 +202,104 @@ class StepLogger:
         
         display_message = trigger_mapping.get(trigger_type, f"Auto-trigger: {trigger_type}")
         self.log_step(f"{display_message}: {condition}", "auto_trigger")
-    
+    def log_query_relaxation(self, suggestions_count: int = 0, current_count: int = 0, estimated_increase: int = 0):
+        """Log query relaxation suggestions."""
+        if suggestions_count > 0:
+            if estimated_increase > 0:
+                self.log_step(f"🔄 Generated {suggestions_count} relaxation suggestions (+{estimated_increase:,} potential candidates)", "relaxation")
+            else:
+                self.log_step(f"🔄 Generated {suggestions_count} query relaxation suggestions", "relaxation")
+        else:
+            self.log_step(f"🔄 Analyzing query for relaxation opportunities", "relaxation")
+
+    def log_relaxation_api_call(self, api_url: str, current_count: int, status: str = "calling"):
+        """Log query relaxation API calls."""
+        if status == "calling":
+            self.log_step(f"📡 Calling query relaxation API (current: {current_count} candidates)", "api")
+        elif status == "success":
+            self.log_step(f"✅ Query relaxation API call successful", "api")
+        elif status == "failed":
+            self.log_step(f"❌ Query relaxation API call failed", "api")
+
+    def log_relaxation_strategy(self, strategy_type: str, description: str = ""):
+        """Log relaxation strategy application."""
+        strategy_mapping = {
+            "skill_relaxation": "🔧 Skill Relaxation",
+            "experience_relaxation": "📈 Experience Range Relaxation", 
+            "location_relaxation": "🌍 Location Relaxation",
+            "salary_relaxation": "💰 Salary Range Relaxation",
+            "remote_work": "🏠 Remote Work Option",
+            "fallback_suggestions": "🛠️ Fallback Suggestions"
+        }
+        
+        display_type = strategy_mapping.get(strategy_type, strategy_type)
+        message = f"{display_type}: {description}" if description else display_type
+        self.log_step(message, "strategy")
+
+    def log_relaxation_conversion(self, session_filters: Dict[str, Any], api_format: str = "converted"):
+        """Log session state to API conversion for relaxation."""
+        skills_count = len(session_filters.get('keywords', []))
+        exp_range = f"{session_filters.get('min_exp', 0)}-{session_filters.get('max_exp', 10)}"
+        cities_count = len(session_filters.get('current_cities', [])) + len(session_filters.get('preferred_cities', []))
+        
+        self.log_step(f"🔧 Converting filters to API format: {skills_count} skills, {exp_range}y exp, {cities_count} cities", "conversion")
+
+    def log_relaxation_parsing(self, suggestions_count: int, method: str = "api"):
+        """Log relaxation response parsing."""
+        method_text = {
+            "api": "API response",
+            "fallback": "fallback rules",
+            "rule_based": "rule-based analysis"
+        }.get(method, method)
+        
+        self.log_step(f"🔧 Parsed {suggestions_count} suggestions from {method_text}", "parsing")
+
+    def log_refinement_routing(self, refinement_type: str):
+        """ENHANCED: Log refinement agent routing decisions."""
+        type_mapping = {
+            "facet_generation": "🔍 Facet Generation",
+            "query_relaxation": "🔄 Query Relaxation",  # NEW
+            "auto_refinement": "🤖 Auto Refinement"
+        }
+        
+        display_type = type_mapping.get(refinement_type, refinement_type)
+        self.log_step(f"🎯 Refinement routing: {display_type}", "routing")
+
+    def log_refinement_completion(self, refinement_type: str, success: bool = True, result_summary: str = ""):
+        """ENHANCED: Log completion of refinement processing."""
+        if success:
+            type_mapping = {
+                "facet_generation": "Facet generation completed",
+                "query_relaxation": "Query relaxation completed",  # NEW
+                "auto_refinement": "Auto refinement completed"
+            }
+            
+            message = type_mapping.get(refinement_type, f"{refinement_type} completed")
+            if result_summary:
+                message += f": {result_summary}"
+            self.log_step(f"🎯 {message}", "completion")
+        else:
+            self.log_step(f"❌ Refinement failed: {refinement_type}", "error")
+
+    def log_relaxation_impact_estimate(self, current_count: int, estimated_increase: int, confidence: float = 0.0):
+        """Log estimated impact of relaxation suggestions."""
+        if estimated_increase > 0:
+            percentage_increase = int((estimated_increase / max(current_count, 1)) * 100)
+            confidence_text = f" (confidence: {confidence:.1f})" if confidence > 0 else ""
+            self.log_step(f"📊 Impact estimate: +{estimated_increase:,} candidates ({percentage_increase}% increase){confidence_text}", "impact")
+        else:
+            self.log_step(f"📊 Estimating relaxation impact for {current_count} current candidates", "impact")
+
+    def log_auto_trigger(self, trigger_type: str, condition: str):
+        """ENHANCED: Log auto-trigger events for refinement."""
+        trigger_mapping = {
+            "facet_auto": "🤖 Auto-triggering facet generation",
+            "relaxation_auto": "🤖 Auto-triggering query relaxation",  # NEW
+            "refinement_suggested": "💡 Refinement suggested"
+        }
+        
+        display_message = trigger_mapping.get(trigger_type, f"Auto-trigger: {trigger_type}")
+        self.log_step(f"{display_message}: {condition}", "auto_trigger")
     def log_processing_time(self, operation: str, start_time: float):
         """Log processing time for an operation."""
         duration = time.time() - start_time

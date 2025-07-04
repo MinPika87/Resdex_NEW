@@ -40,7 +40,7 @@ class QueryRelaxationTool(Tool):
         )
         
         # API Configuration
-        self.api_url = "http://10.10.112.202:8125/get_relaxed_query_optimized"
+        self.api_url = "http://10.10.112.202:8125/get_relaxed_query_optimized_verified"
         self.headers = {
             'Content-Type': 'application/json',
             'X-TRANSACTION-ID': '3113ea131'

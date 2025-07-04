@@ -4,7 +4,7 @@
 Search form component for ResDex Agent UI - Sequential Layout (No Nested Columns)
 """
 
-import streamlit as st
+import streamlit as st#type: ignore
 from typing import Dict, Any, List
 from ...utils.constants import TECH_SKILLS, CITIES
 
@@ -16,28 +16,22 @@ class SearchForm:
         self.session_state = session_state
     
     def render_company_input(self):
-    # Use columns for compact validation display
-        col1, col2 = st.columns([4, 1])
+        """Render company name input - Sequential layout."""
+        company = st.text_input(
+            "Company Name *",
+            value=self.session_state.get('recruiter_company', ''),
+            placeholder="e.g., TCS, Infosys, Google",
+            help="Enter your company name (required for search)"
+        )
+        self.session_state['recruiter_company'] = company
         
-        with col1:
-            company = st.text_input(
-                "Company Name *",
-                value=self.session_state.get('recruiter_company', ''),
-                placeholder="e.g., TCS, Infosys, Google",
-                help="Enter your company name (required for search)"
-            )
-            self.session_state['recruiter_company'] = company
-        
-        with col2:
-            # Compact validation indicator at the side
-            if not company.strip():
-                st.markdown('<p style="color: #e74c3c; font-size: 1.2rem; margin-top: 25px;">⚠️ Required</p>', 
+        # Small validation indicator right after input
+        if not company.strip():
+            st.markdown('<p style="color: #e74c3c; font-size: 0.8rem; margin-top: -15px; margin-bottom: 5px;">⚠️ Company name required</p>', 
                         unsafe_allow_html=True)
-            else:
-                st.markdown('<p style="color: #27ae60; font-size: 1.2rem; margin-top: 25px;">✅ Set</p>', 
+        else:
+            st.markdown('<p style="color: #27ae60; font-size: 0.8rem; margin-top: -15px; margin-bottom: 5px;">✅ Company name set</p>', 
                         unsafe_allow_html=True)
-    
-    # Replace the search form methods in resdx_agent/ui/components/search_form.py
 
     def render_keywords_section(self):
         """Render keywords/skills input section with auto-clearing."""
@@ -144,18 +138,73 @@ class SearchForm:
         if min_salary > max_salary:
             st.error("⚠️ Min salary cannot be greater than max salary")
     
-    def render_search_controls(self):
-        """Render search controls section - SEQUENTIAL layout like old version."""
-        active_options = ["1 day", "15 days", "1 month", "2 months", "3 months", "6 months", "1 year"]
-        st.session_state['active_days'] = st.selectbox(
-            "Active in", 
-            active_options, 
-            index=active_options.index(st.session_state.get('active_days', '1 month'))
+    def render_company_section(self):
+        """Render company section for column 5 - Compact layout."""
+        # Initialize counter for unique keys
+        if 'company_counter' not in st.session_state:
+            st.session_state.company_counter = 0
+        
+        # Compact dropdown for known companies
+        KNOWN_COMPANIES = [
+            "", "TCS", "Infosys", "Wipro", "Accenture", "Cognizant", "IBM", "Microsoft", 
+            "Google", "Amazon", "HCL", "Tech Mahindra", "Capgemini", "Oracle", "SAP",
+            "Blue Dart", "Flipkart", "Paytm", "Zomato", "Swiggy", "Ola", "Uber"
+        ]
+        
+        # Dropdown selection
+        company_dropdown = st.selectbox(
+            "Select Company", 
+            KNOWN_COMPANIES,
+            key=f"company_dropdown_{st.session_state.company_counter}"
         )
         
-        st.markdown("")  # Small spacing
-        st.markdown("")  # Extra spacing
-        return st.button("🔍 Search Candidates")
+        # Text input for custom company
+        company_text = st.text_input(
+            "Or Enter Custom", 
+            placeholder="e.g., Blue Dart",
+            key=f"company_text_{st.session_state.company_counter}"
+        )
+        
+        # Add button
+        add_company = st.button("Add Company", key="add_company_col5")
+        
+        # Handle adding company
+        if add_company:
+            selected_company = ""
+            
+            # Prioritize text input over dropdown
+            if company_text.strip():
+                selected_company = company_text.strip()
+            elif company_dropdown:
+                selected_company = company_dropdown
+            
+            if selected_company:
+                if selected_company not in self.session_state.get('target_companies', []):
+                    self.session_state.setdefault('target_companies', []).append(selected_company)
+                    
+                    # Increment counter to clear inputs
+                    st.session_state.company_counter += 1
+                    st.experimental_rerun()
+                else:
+                    st.warning(f"'{selected_company}' already added!", icon="⚠️")
+        
+        # Display current companies (very compact for column)
+        self._display_companies_compact_column()
+
+    def _display_companies_compact_column(self):
+        """Display current companies - Ultra compact for column layout."""
+        target_companies = self.session_state.get('target_companies', [])
+        
+        if target_companies:
+            st.markdown("**Current:**")
+            for idx, company in enumerate(target_companies):
+                # Very compact display - truncate long names
+                display_name = company[:12] + "..." if len(company) > 12 else company
+                if st.button(f"✕ {display_name}", 
+                        key=f"remove_comp_{idx}", 
+                        help=f"Remove {company}"):
+                    st.session_state['target_companies'].remove(company)
+                    st.experimental_rerun()
     
     def validate_form(self) -> List[str]:
         """Validate search form inputs."""
@@ -172,7 +221,7 @@ class SearchForm:
         
         if self.session_state.get('min_salary', 0) > self.session_state.get('max_salary', 15):
             errors.append("Minimum salary cannot be greater than maximum salary.")
-        
+        #no validation required for other filters as they are optional
         return errors
     
     def _display_keywords_compact(self):

@@ -29,9 +29,10 @@ class ModificationType(Enum):
     LOCATION_ADDED = "location_added"
     LOCATION_REMOVED = "location_removed"
     ACTIVE_PERIOD_MODIFIED = "active_period_modified"
+    TARGET_COMPANY_ADDED = "target_company_added"
+    TARGET_COMPANY_REMOVED = "target_company_removed"
 
 
-# Tech Skills (same as before)
 TECH_SKILLS: List[str] = [
     # Programming Languages
     "Python", "Java", "JavaScript", "TypeScript", "C++", "C#", "C", "Ruby", "PHP", "Swift", 
@@ -158,7 +159,6 @@ TECH_SKILLS: List[str] = [
     "Requirement Analysis", "Technical Specification", "System Design", "Architecture Design"
 ]
 
-# Cities (same as before)
 CITIES: List[str] = [
     # Tier 1 Cities (Major Metro Cities)
     "Mumbai", "Delhi", "Bangalore", "Hyderabad", "Chennai", "Kolkata", "Pune", "Ahmedabad",
@@ -208,6 +208,153 @@ API_COOKIES: Dict[str, Dict[str, str]] = {
 }
 
 # CRITICAL FIX: Base API request template (using working version format)
+null=None
+true=True
+false=False
+BASE_API_REQUEST: Dict[str, Any] = {
+    "sid": None,
+    "ctc_Type": "rs",
+    "company_id": 238592,  # Keep your existing company_id
+    "comnotGroupId": "4634501",  # Keep your existing value
+    "recruiter_id": 3922808,  # Keep your existing recruiter_id
+    "preference_key": "3256ce65-2c16-48a6-b233-4b09ca76e34e",  # Keep your existing
+    "user_ids": None,
+    "search_flag": "adv",
+    "unique_id": None,
+    "ez_keyword_any": [],
+    "anyKeywords": [],
+    "ez_keyword_all": [],
+    "allKeywords": [],
+    "ez_keyword_exclude": [],
+    "excludeKeywords": [],
+    "inc_keyword": "",
+    "incKeywords": "",
+    "key_type": "ezkw",
+    "swr_key": None,
+    "swr_exclude_key": None,
+    "swr_type": "bool",
+    "srch_key_in": "ER",
+    "it_params": {
+        "operator": "OR",
+        "fullSearchFlag": 0,
+        "skills": None,
+        "enableTaxonomy": True
+    },
+    "min_exp": "-1",
+    "max_exp": "-1",
+    "min_ctc": "0",
+    "max_ctc": "100",
+    "ctc_type": "rs",
+    "CTC_Type": "rs",
+    "dollarRate": 60,
+    "dollar_rate": 60,
+    "zero_ctc_search": False,
+    "city": [],
+    "currentStateId": [],
+    "OCity": "",
+    "pref_loc": [],
+    "preferredStateId": [],
+    "loc_city_only": 0,
+    "location_op": "or",
+    "farea_roles": [],
+    "indtype": [],
+    "excludeIndtype": [],
+    "emp_key": "",
+    "emp_type": "ezkw",
+    "srch_emp_in": "C",
+    "exemp_key": "",
+    "exemp_type": "ezkw",
+    "srch_exemp_in": "C",
+    "desig_key_entity": None,
+    "desig_key": None,
+    "desig_type": "ezkw",
+    "srch_des_in": "C",
+    "noticePeriodArr": [0],
+    "notice_period": [0],
+    "ugcourse": [],
+    "ug_year_range": [-1, -1],
+    "uginst_key": "",
+    "uginst_id_key_map": {},
+    "uginst_type": "all",
+    "ug_edu_type": [0],
+    "pgcourse": [],
+    "pg_year_range": [-1, -1],
+    "pginst_key": "",
+    "pginst_id_key_map": {},
+    "pginst_type": "all",
+    "pg_edu_type": [0],
+    "ppgcourse": [],
+    "ppg_year_range": [-1, -1],
+    "ppginst_key": "",
+    "ppginst_id_key_map": {},
+    "ppginst_type": "all",
+    "ppg_edu_type": [0],
+    "ug_pg_type": "and",
+    "pg_ppg_type": "and",
+    "caste_id": [],
+    "gender": "n",
+    "dis_type": False,
+    "candidate_age_range": [-1, -1],
+    "wstatus_usa": [-1],
+    "work_auth_others": [-1],
+    "all_new": "ALL",
+    "search_on_verified_numbers": False,
+    "verified_email": False,
+    "uploaded_cv": False,
+    "search_on_job_type": "",
+    "search_on_jobs_status_type": "",
+    "premium": False,
+    "featured_search": False,
+    "PAGE_LIMIT": 40,
+    "sort_by": "RELEVANCE",
+    "isMakeSenseSrch": 1,
+    "days_old": 3650,
+    "hiring_for": None,
+    "hiring_for_search_type": "bool",
+    "fetch_clusters": {},
+    "cluster_industry": None,
+    "cluster_exclude_industry": None,
+    "cluster_role": None,
+    "kwMap": "n",
+    "kw_map": "n",
+    "ezSearch": "n",
+    "SEARCH_OFFSET": 0,
+    "SEARCH_COUNT": 80,
+    "freeSearch": False,
+    "subQuery": "",
+    "uid": "madhesiyaaaaa::318611090120763389791::2711329165430845::15953068524754885928",
+    "al_engine_ip": "rpcservices1.resdex.com",
+    "al_engine_port": 9123,
+    "makesense_url": "http://test.semantic.resdex.com/v1/restructureresdexquery",
+    "makesense_timeout": 1000,
+    "makesense_response_timeout": 1000,
+    "appname": "resdex",
+    "ctcclus_sel": ["0000", "5200"],
+    "roles": "",
+    "magicFlag": "0",
+    "magic_flag": "0",
+    "farea": [0],
+    "any_keyword_srch_type": "bool",
+    "x_xii_type": None,
+    "immediatelyAvailable": False,
+    "cluster_notice_period": None,
+    "cluster_location": None,
+    "date_range": None,
+    "emp_key_globalid": {},
+    "exemp_key_globalid": {},
+    "verifiedSkillIds": None,
+    "candidatesWithVerifiedSkills": None,
+    "company_type": None,
+    "expActive": True,
+    "rerankEnabled": True,
+    "excludeTestProfiles": False,
+    "contests": None,
+    "profileTags": None,
+    "segmentEnabled": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "anyKeywordTags": "",
+    "allKeywordTags": ""
+}
+"""
 BASE_API_REQUEST: Dict[str, Any] = {
     "transactionId": "madhesiyaaaaa::318611090120763389791::2711329165430845::15953068524754885928",
     "city": [],
@@ -271,12 +418,15 @@ BASE_API_REQUEST: Dict[str, Any] = {
     "SEARCH_COUNT": 80,
     "recruiter_id": 3922808,
     "company_id": 238592,
+    "emp_type":"ezkw",
+    "emp_key": "Accenture",
+    "emp_key_globalid": {"10476": "Accenture"},
     "PAGE_LIMIT": "40",
-    "preference_key": "3256ce65-2c16-48a6-b233-4b09ca76e34e",
+    "preference_key": "be246d94-4302-46d1-afd8-557b9e551cf7",#3256ce65-2c16-48a6-b233-4b09ca76e34e
     "verifiedSkillIds": None,
     "candidatesWithVerifiedSkills": False,
     "comnotGroupId": "4634501"
-}
+}"""
 
 # CRITICAL FIX: Active period mapping (using working version that works with staging)
 ACTIVE_PERIOD_MAPPING: Dict[str, str] = {

@@ -92,7 +92,8 @@ class StreamlitApp:
         # NEW: Facet-related session state
         'facets_available': False,
         'current_facets': {},
-        'facet_interaction_count': 0
+        'facet_interaction_count': 0,
+        'target_companies':[]
     }
         
         for key, default_value in defaults.items():
@@ -271,13 +272,13 @@ class StreamlitApp:
     
     def _render_main_content(self):
         """Render main content area."""
-        # Search form
         with st.container():
             st.markdown("### Search Configuration")
             
-            # Company input
             self.search_form.render_company_input()
-            
+            search_button = st.button("🔍 Search Candidates", key="search_candidates_main")
+            if search_button:
+                asyncio.run(self._handle_search_request_with_memory())            
             # Reduced gap
             st.markdown("<div style='margin: 0.5rem 0;'></div>", unsafe_allow_html=True)
             
@@ -301,10 +302,8 @@ class StreamlitApp:
                 self.search_form.render_salary_section()
             
             with col5:
-                st.markdown("**Search**")
-                search_button = self.search_form.render_search_controls()
-                if search_button:
-                    asyncio.run(self._handle_search_request_with_memory())
+                st.markdown("**Target Companies**")
+                self.search_form.render_company_section()
         
         # Results section
         st.markdown("---")
@@ -524,6 +523,7 @@ class StreamlitApp:
                 'current_cities': st.session_state['current_cities'],
                 'preferred_cities': st.session_state['preferred_cities'],
                 'recruiter_company': st.session_state['recruiter_company'],
+                'target_companies': st.session_state['target_companies'],
                 'max_candidates': 100
             }
             

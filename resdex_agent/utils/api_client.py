@@ -53,14 +53,18 @@ class APIClient:
             print(f"  - Cookies: {API_COOKIES['search']}")
             print(f"  - Payload size: {len(str(request_payload))} characters")
             
+            emp_key = request_payload.get('emp_key', '')
+            emp_key_globalid = request_payload.get('emp_key_globalid', {})
+            print(f"🏢 emp_key: '{emp_key}'")
+            print(f"🏢 emp_key_globalid: {emp_key_globalid}")
+            
             response = requests.post(
                 self.search_api_url,
                 headers=API_HEADERS["search"],
                 cookies=API_COOKIES["search"],
                 json=request_payload,
                 timeout=30
-            )
-            
+            )           
             print(f"📡 SEARCH API RESPONSE:")
             print(f"  - Status Code: {response.status_code}")
             print(f"  - Response size: {len(response.text)} characters")
@@ -140,37 +144,48 @@ class APIClient:
     # Update the build_search_request method in api_client.py
 
     def build_search_request(self, session_state: Dict[str, Any]) -> Dict[str, Any]:
-        """Build the API request object based on current session state - FIXED for more candidates."""
+        """Build the API request object using company normalization API."""
         print(f"🔧 Building search request with session state...")
         print(f"🔹 Keywords: {session_state.get('keywords', [])}")
         print(f"🔹 Experience: {session_state.get('min_exp', 0)}-{session_state.get('max_exp', 10)}")
         print(f"🔹 Salary: {session_state.get('min_salary', 0)}-{session_state.get('max_salary', 15)}")
         print(f"🔹 Current Cities: {session_state.get('current_cities', [])}")
         print(f"🔹 Preferred Cities: {session_state.get('preferred_cities', [])}")
-        print(f"🔹 Company: {session_state.get('recruiter_company', '')}")
-        print(f"🔹 Max Candidates Requested: {session_state.get('max_candidates', 100)}")
+        print(f"🔹 Recruiter Company: {session_state.get('recruiter_company', '')}")
+        print(f"🔹 Target Companies: {session_state.get('target_companies', [])}")
         
-        # Get city IDs using working version logic
+        # Get city IDs (existing working logic)
         city_ids = []
         for city in session_state.get('current_cities', []):
             city_id = self.get_normalized_location_id(city)
             if city_id:
                 city_ids.append(city_id)
             else:
-                # Fallback: add city name directly
                 city_ids.append(city)
         
-        # Get preferred city IDs
         pref_city_ids = []
         for city in session_state.get('preferred_cities', []):
             city_id = self.get_normalized_location_id(city)
             if city_id:
                 pref_city_ids.append(city_id)
             else:
-                # Fallback: add city name directly
                 pref_city_ids.append(city)
         
-        # Process keywords using working version logic
+        # NEW: Get company IDs using normalization API
+        target_companies = session_state.get('target_companies', [])
+        emp_key_globalid = {}
+        
+        if target_companies:
+            from ..tools.company_tools import CompanyNormalizationTool
+            company_tool = CompanyNormalizationTool()
+            
+            print(f"🏢 Getting company IDs for: {target_companies}")
+            emp_key_globalid = company_tool.get_company_mapping(target_companies)
+        
+        print(f"🏢 COMPANY FILTER:")
+        print(f"  - emp_key_globalid: {emp_key_globalid}")
+        
+        # Process keywords (existing working logic)
         any_keywords = []
         all_keywords = []
         any_keyword_tags = []
@@ -182,32 +197,27 @@ class APIClient:
                 all_keywords.append({
                     "key": None,
                     "value": clean_keyword,
-                    "type": None,
-                    "globalName": None
+                    "type": "skill",
+                    "globalName": clean_keyword
                 })
                 all_keyword_tags.append(clean_keyword)
             else:
                 any_keywords.append({
                     "key": None,
                     "value": keyword,
-                    "type": None,
-                    "globalName": None
+                    "type": "skill",
+                    "globalName": keyword
                 })
                 any_keyword_tags.append(keyword)
         
         # Create base request copy
         request_object = BASE_API_REQUEST.copy()
         
-        # FIXED: Calculate search count based on requested candidates
+        # Calculate search count
         max_candidates = session_state.get('max_candidates', 100)
+        api_search_count = max(80, max_candidates)
         
-        # FIXED: Request significantly more from API to ensure we get enough results
-        # API might filter out candidates, so request 3-5x more than needed
-        api_search_count = max(200, max_candidates * 5)  # At least 200, up to 5x requested
-        
-        print(f"🎯 REQUESTING {api_search_count} candidates from API (target: {max_candidates})")
-        
-        # Update with session state values using working version logic
+        # Update with session state values
         request_object.update({
             "city": city_ids,
             "pref_loc": pref_city_ids,
@@ -218,24 +228,23 @@ class APIClient:
             "anyKeywordTags": ",".join(any_keyword_tags) if any_keyword_tags else "",
             "allKeywordTags": ",".join(all_keyword_tags) if all_keyword_tags else "",
             "min_exp": str(int(session_state.get('min_exp', 0))) if session_state.get('min_exp', 0) > 0 else "-1",
-            "max_exp": str(int(session_state.get('max_exp', 0))) if session_state.get('max_exp', 0) > 0 else "-1",
+            "max_exp": str(int(session_state.get('max_exp', 10))) if session_state.get('max_exp', 10) < 50 else "-1",
             "min_ctc": str(session_state.get('min_salary', 0)) if session_state.get('min_salary', 0) > 0 else "0",
-            "max_ctc": str(session_state.get('max_salary', 0)) if session_state.get('max_salary', 0) > 0 else "15.0",
-            "days_old": self.get_days_old_mapping(session_state.get('active_days', '1 month')),
-            "recruiter_company": session_state.get('recruiter_company', ''),
+            "max_ctc": str(session_state.get('max_salary', 15)) if session_state.get('max_salary', 15) < 100 else "100",
             
-            # FIXED: Override search counts to get more results
-            "SEARCH_COUNT": api_search_count,  # Number of candidates to return
-            "PAGE_LIMIT": str(api_search_count),  # API page limit
-            "SEARCH_OFFSET": 0  # Start from beginning
+            # Company filter using API results
+            "emp_key_globalid": emp_key_globalid,
+            
+            # Search counts
+            "SEARCH_COUNT": api_search_count,
+            "PAGE_LIMIT": api_search_count
         })
         
-        print(f"🔧 API REQUEST CONFIGURED:")
+        print(f"🔧 FINAL API REQUEST:")
         print(f"  - SEARCH_COUNT: {request_object['SEARCH_COUNT']}")
-        print(f"  - PAGE_LIMIT: {request_object['PAGE_LIMIT']}")
-        print(f"  - Target candidates: {max_candidates}")
-        print(f"  - Optional keywords: {len(any_keyword_tags)}")
-        print(f"  - Mandatory keywords: {len(all_keyword_tags)}")
+        print(f"  - emp_key_globalid: {request_object['emp_key_globalid']}")
+        print(f"  - anyKeywordTags: '{request_object['anyKeywordTags']}'")
+        print(f"  - allKeywordTags: '{request_object['allKeywordTags']}'")
         
         return request_object
 
